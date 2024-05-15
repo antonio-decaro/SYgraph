@@ -25,7 +25,7 @@ template <sygraph::operators::LoadBalancer lb,
           typename lambda_t>
 sygraph::event vertex(graph_t& graph, in_frontier_t& in, out_frontier_t& out, lambda_t&& functor) {
   if constexpr (lb == sygraph::operators::LoadBalancer::workitem_mapped) {
-    return sygraph::operators::advance::detail::workitem_mapped::vertex(graph, in, out, std::forward<lambda_t>(functor));
+    return sygraph::operators::advance::detail::workitem_mapped::vertex_local_mem(graph, in, out, std::forward<lambda_t>(functor));
     // return sygraph::operators::advance::detail::vertex_local_mem(graph, in, out, std::forward<lambda_t>(functor));
   } else if (lb == sygraph::operators::LoadBalancer::workgroup_mapped) {
     return sygraph::operators::advance::detail::workgroup_mapped::vertex(graph, in, out, std::forward<lambda_t>(functor));
