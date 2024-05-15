@@ -20,27 +20,32 @@ struct local_vector_context_t {
 
   local_vector_context_t(size_t max_elems, sycl::handler& cgh) : max_elems(max_elems), data(max_elems, cgh), tail(1, cgh) {} // TODO: [!!] fix this
 
-  SYCL_EXTERNAL static inline void init(const local_vector_context_t& context, sycl::nd_item<1>& item) {
-    sycl::atomic_ref<size_t, sycl::memory_order::relaxed, sycl::memory_scope::work_group, sycl::access::address_space::local_space> ref (context.tail[0]);
+  SYCL_EXTERNAL inline void init(sycl::nd_item<1>& item) const {
+    sycl::atomic_ref<size_t, sycl::memory_order::relaxed, sycl::memory_scope::work_group, sycl::access::address_space::local_space> ref (tail[0]);
     if (item.get_local_linear_id() == 0) {
       ref = 0;
     }
     sycl::group_barrier(item.get_group());
   }
 
-  SYCL_EXTERNAL static inline bool insert(const local_vector_context_t& context, type_t val) {
-    sycl::atomic_ref<size_t, sycl::memory_order::relaxed, sycl::memory_scope::work_group> ref (context.tail[0]);
+  SYCL_EXTERNAL inline bool insert(type_t val) const {
+    sycl::atomic_ref<size_t, sycl::memory_order::relaxed, sycl::memory_scope::work_group, sycl::access::address_space::local_space> ref (tail[0]);
     // size_t& ref = tail[0];
-    if (ref >= context.max_elems) {
+    if (ref.load() >= max_elems) {
       return false;
     }
     size_t loc = ref.fetch_add(1);
-    context.data[loc] = val;
+    data[loc] = val;
     return true;
   }
 
-  SYCL_EXTERNAL static inline void copy_to_global(const local_vector_context_t& context, sycl::nd_item<1>& item, const device_vector_frontier_t<type_t>& out) {
-    sycl::atomic_ref<size_t, sycl::memory_order::relaxed, sycl::memory_scope::device, sycl::access::address_space::local_space> ref (context.tail[0]);
+  SYCL_EXTERNAL inline size_t get_prealloc_size(sycl::nd_item<1>& item) const {
+    sycl::atomic_ref<size_t, sycl::memory_order::relaxed, sycl::memory_scope::work_group, sycl::access::address_space::local_space> ref (tail[0]);
+    return ref.load();
+  }
+
+  SYCL_EXTERNAL inline void copy_to_global(sycl::nd_item<1>& item, const device_vector_frontier_t<type_t>& out) const {
+    sycl::atomic_ref<size_t, sycl::memory_order::relaxed, sycl::memory_scope::device, sycl::access::address_space::local_space> ref (tail[0]);
     size_t lid = item.get_local_linear_id();
     sycl::group_barrier(item.get_group());
     size_t address_space = 0;
@@ -49,7 +54,7 @@ struct local_vector_context_t {
     }
     address_space = sycl::group_broadcast(item.get_group(), address_space, 0);
     for (size_t i = lid; i < ref; i += item.get_local_range(0)) {
-      out.insert(context.data[i], address_space + i);
+      out.insert(data[i], address_space + i);
     }
   }
 
@@ -200,7 +205,7 @@ public:
     return vector;
   }
 
-  const local_vector_context_t<type_t> get_local_context(sycl::handler& cgh) const {
+  local_vector_context_t<type_t> get_local_context(sycl::handler& cgh) const {
     return std::move(local_vector_context_t<type_t>(types::detail::MAX_LOCAL_MEM_SIZE, cgh));
   }
 

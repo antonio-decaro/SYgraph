@@ -112,11 +112,14 @@ sygraph::event vertex_local_mem(graph_t& graph, const in_frontier_t& in, out_fro
     auto local_context = in.get_local_context(cgh);
     using local_context_type = decltype(local_context);
 
+    sycl::stream os {1024, 64, cgh};
+
     cgh.parallel_for<class vertex_local_mem_advance_kernel>(sycl::nd_range<1>{global_size, local_size}, [=](sycl::nd_item<1> item) {
       size_t gid = item.get_global_linear_id();
       size_t lid = item.get_local_linear_id();
 
-      local_context_type::init(local_context, item);
+      local_context.init(item);
+
       sycl::group_barrier(item.get_group());
 
       if (gid < active_elements_size) {
@@ -130,15 +133,31 @@ sygraph::event vertex_local_mem(graph_t& graph, const in_frontier_t& in, out_fro
           auto weight = graphDev.get_edge_weight(edge);
           auto neighbor = *i;
           if (functor(element, neighbor, edge, weight)) {
-            if (!local_context_type::insert(local_context, neighbor)) {
-              outDevFrontier.insert(neighbor);
+            if (!local_context.insert(neighbor)) {
+              // outDevFrontier.insert(neighbor);
             }
+            outDevFrontier.insert(neighbor); // TODO remove
           }
         }
       }
-      local_context_type::copy_to_global(local_context, item, outDevFrontier);
+      // if (lid == 0) {
+      //   os << "Group: " << item.get_group(0) << " | " << local_context.tail[0] << sycl::endl;
+      // }
+      sycl::group_barrier(item.get_group());
+      size_t prealloc_size = local_context.get_prealloc_size(item);
+      size_t address_space = 0;
+      if (lid == 0) {
+        os << "Group: " << item.get_group(0) << " | " << prealloc_size << sycl::endl;
+        // address_space = outDevFrontier.prealloc(prealloc_size);
+      }
+      address_space = sycl::group_broadcast(item.get_group(), address_space, 0);
+      // for (size_t i = lid; i < prealloc_size; i += item.get_local_range(0)) {
+      //   outDevFrontier.insert(local_context.data[i], prealloc_size + i);
+      // }
+      // local_context.copy_to_global(item, outDevFrontier);
     });
   })};
+  std::cout << std::endl;
 
   if (!in.self_allocated()) {
     sycl::free(active_elements, q);
