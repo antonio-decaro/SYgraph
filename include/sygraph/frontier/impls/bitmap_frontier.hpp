@@ -257,7 +257,7 @@ public:
       h.parallel_for<class get_num_active_elements_kernel>(nd_range, [=](sycl::nd_item<1> item) {
         auto group = item.get_group();
         auto lcount = bitmap.get_num_active_elements(item, group);
-        if (item.get_global_linear_id() == 0) {
+        if (item.get_group().leader()) {
           *count = lcount;
         }
       });
@@ -302,7 +302,7 @@ public:
         auto group_id = item.get_group_linear_id();
         auto group_size = item.get_local_range(0);
         
-        if (lid == 0) {
+        if (group.leader()) {
           l_tail_ref = 0;
           if (gid == 0) {
             g_tail_ref = 0;
@@ -324,7 +324,7 @@ public:
         sycl::group_barrier(group);
 
         size_t our_slice = 0;
-        if (lid == 0) {
+        if (group.leader()) {
           our_slice = g_tail_ref.fetch_add(l_tail_ref.load());
         }
         our_slice = sycl::group_broadcast(group, our_slice, 0);
