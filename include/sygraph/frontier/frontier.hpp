@@ -39,7 +39,7 @@ template<FrontierView view, FrontierType type, typename GraphType>
 auto makeFrontier(sycl::queue& q, const GraphType& graph) {
   size_t frontier_size = 0;
   if constexpr (view == FrontierView::vertex) {
-    frontier_size = graph.getVertexCount();
+    frontier_size = graph.getVertexCount() * 2;
     return Frontier<typename GraphType::vertex_t, view, type>(q, frontier_size);
   } else {
     frontier_size = graph.getEdgeCount();

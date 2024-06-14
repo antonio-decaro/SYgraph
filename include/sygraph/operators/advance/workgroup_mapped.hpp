@@ -305,7 +305,7 @@ sygraph::event launchVectorKernel(GraphT& graph,
     sycl::local_accessor<T, 1> active_elements_local{local_range, cgh};
     sycl::local_accessor<uint32_t, 1> ids{local_range, cgh};
     sycl::local_accessor<uint32_t, 1> active_elements_local_tail{types::detail::MAX_SUBGROUPS, cgh};
-    sycl::local_accessor<T, 1> pad{outDevFrontier.getVectorMaxSize(), cgh};
+    sycl::local_accessor<T, 1> pad{8192 /*outDevFrontier.getVectorMaxSize()*/, cgh};
     sycl::local_accessor<uint32_t, 1> pad_tail{1, cgh};
 
     cgh.parallel_for(sycl::nd_range<1>{global_range, local_range},
@@ -346,6 +346,14 @@ sygraph::event vertex(GraphT& graph,
                       const sygraph::frontier::Frontier<T, sygraph::frontier::FrontierView::vertex, sygraph::frontier::FrontierType::bitmap>& out,
                       LambdaT&& functor) {
   return launchBitmapKernel(graph, in, out, std::forward<LambdaT>(functor));
+}
+
+template<graph::detail::GraphConcept GraphT, typename T, typename LambdaT>
+sygraph::event vertex(GraphT& graph,
+                      const sygraph::frontier::Frontier<T, sygraph::frontier::FrontierView::vertex, sygraph::frontier::FrontierType::vector>& in,
+                      const sygraph::frontier::Frontier<T, sygraph::frontier::FrontierView::vertex, sygraph::frontier::FrontierType::vector>& out,
+                      LambdaT&& functor) {
+  return launchVectorKernel(graph, in, out, std::forward<LambdaT>(functor));
 }
 
 } // namespace workgroup_mapped

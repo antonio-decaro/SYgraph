@@ -16,40 +16,6 @@ template<typename type_t>
 class device_vector_frontier_t;
 
 template<typename type_t>
-struct local_vector_frontier_t {
-  local_vector_frontier_t(size_t max_elems, sycl::handler& cgh) : max_elems(max_elems), data(max_elems, cgh), tail(1, cgh) {} // TODO: [!!] fix this
-
-  SYCL_EXTERNAL inline void init(sycl::nd_item<1>& item) const {
-    sycl::atomic_ref<size_t, sycl::memory_order::relaxed, sycl::memory_scope::work_group, sycl::access::address_space::local_space> ref(tail[0]);
-    if (item.get_local_linear_id() == 0) { ref = 0; }
-    sycl::group_barrier(item.get_group());
-  }
-
-  SYCL_EXTERNAL inline bool insert(type_t val) const {
-    sycl::atomic_ref<size_t, sycl::memory_order::relaxed, sycl::memory_scope::work_group> ref(tail[0]);
-    // size_t& ref = tail[0];
-    if (ref >= max_elems) { return false; }
-    size_t loc = ref.fetch_add(1);
-    data[loc] = val;
-    return true;
-  }
-
-  SYCL_EXTERNAL inline void copy_to_global(sycl::nd_item<1>& item, const device_vector_frontier_t<type_t>& out) const {
-    sycl::atomic_ref<size_t, sycl::memory_order::relaxed, sycl::memory_scope::device, sycl::access::address_space::local_space> ref(tail[0]);
-    size_t lid = item.get_local_linear_id();
-    sycl::group_barrier(item.get_group());
-    size_t address_space = 0;
-    if (lid == 0) { address_space = out.prealloc(ref.load()); }
-    address_space = sycl::group_broadcast(item.get_group(), address_space, 0);
-    for (size_t i = lid; i < ref; i += item.get_local_range(0)) { out.insert(data[i], address_space + i); }
-  }
-
-  sycl::local_accessor<type_t, 1> data;
-  sycl::local_accessor<size_t, 1> tail;
-  const size_t max_elems;
-};
-
-template<typename type_t>
 class device_vector_frontier_t {
   friend class frontier_vector_t<type_t>;
 
@@ -57,17 +23,17 @@ public:
   device_vector_frontier_t(size_t max_size) : max_size(max_size) {}
 
   SYCL_EXTERNAL inline bool empty() const {
-    sycl::atomic_ref<size_t, sycl::memory_order::relaxed, sycl::memory_scope::device> ref(tail[0]);
+    sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed, sycl::memory_scope::device> ref(tail[0]);
     return ref.load() == 0;
   }
 
   SYCL_EXTERNAL inline size_t size() const {
-    sycl::atomic_ref<size_t, sycl::memory_order::relaxed, sycl::memory_scope::device> ref(tail[0]);
+    sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed, sycl::memory_scope::device> ref(tail[0]);
     return ref.load();
   }
 
   SYCL_EXTERNAL inline bool insert(type_t val) const {
-    sycl::atomic_ref<size_t, sycl::memory_order::relaxed, sycl::memory_scope::device> ref(tail[0]);
+    sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed, sycl::memory_scope::device> ref(tail[0]);
     if (ref.load() >= max_size) { return false; }
     data[ref++] = val;
     return true;
@@ -82,22 +48,53 @@ public:
   SYCL_EXTERNAL inline bool remove(type_t val) const { return false; }
 
   SYCL_EXTERNAL inline void clear() const {
-    sycl::atomic_ref<size_t, sycl::memory_order::relaxed, sycl::memory_scope::device> ref(tail[0]);
+    sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed, sycl::memory_scope::device> ref(tail[0]);
     ref = 0;
   }
 
   SYCL_EXTERNAL inline size_t prealloc(size_t num_elems) const { // TODO: [!] check for max size
-    sycl::atomic_ref<size_t, sycl::memory_order::relaxed, sycl::memory_scope::device> ref(tail[0]);
+    sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed, sycl::memory_scope::device> ref(tail[0]);
     return ref.fetch_add(num_elems);
   }
 
+  template<typename T, sycl::memory_order MO, sycl::memory_scope MS>
+  SYCL_EXTERNAL inline bool
+  finalize(sycl::nd_item<1> item, const sycl::local_accessor<type_t, 1>& pad, const sycl::atomic_ref<T, MO, MS>& pad_tail_ref) const {
+    auto group = item.get_group();
+    auto lid = item.get_local_linear_id();
+    sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed, sycl::memory_scope::device> tail_ref(tail[0]);
+
+    size_t data_offset = max_size;
+    if (group.leader()) { data_offset = tail_ref.fetch_add(pad_tail_ref.load()); }
+    data_offset = sycl::group_broadcast(group, data_offset, 0);
+    for (int i = lid; i < pad_tail_ref.load() && i < max_size; i += item.get_local_range(0)) { data[data_offset + i] = pad[i]; }
+
+    return true;
+  }
+
+  SYCL_EXTERNAL size_t getVectorMaxSize() const { return max_size; }
+
+  SYCL_EXTERNAL uint32_t getVectorSize() const { return *tail; }
+
+  SYCL_EXTERNAL uint32_t* getVectorSizePtr() const { return tail; }
+
+  template<typename T, sycl::memory_order MO, sycl::memory_scope MS>
+  SYCL_EXTERNAL inline bool insert(type_t val, const sycl::local_accessor<type_t, 1>& pad, const sycl::atomic_ref<T, MO, MS>& pad_tail) const {
+    if (pad_tail.load() < max_size) {
+      pad[pad_tail++] = val;
+    } else {
+      return insert(val);
+    }
+    return true;
+  }
+
 protected:
-  inline void set_tail(size_t new_tail) { *tail = new_tail; }
+  inline void set_tail(uint32_t new_tail) { *tail = new_tail; }
   inline size_t get_tail() const { return *tail; }
 
 private:
   type_t* data;
-  size_t* tail;
+  uint32_t* tail;
   size_t max_size;
 };
 
@@ -112,9 +109,9 @@ public:
   }
 
   frontier_vector_t(sycl::queue& q, size_t num_elems) : q(q), vector(num_elems) {
-    vector.data = memory::detail::memoryAlloc<type_t, memory::space::shared>(num_elems, q);
-    vector.tail = memory::detail::memoryAlloc<size_t, memory::space::shared>(1, q);
-    vector.set_tail(0);
+    vector.data = memory::detail::memoryAlloc<type_t, memory::space::device>(num_elems, q);
+    vector.tail = memory::detail::memoryAlloc<uint32_t, memory::space::device>(1, q);
+    q.fill(vector.tail, 0, 1).wait();
   }
 
   ~frontier_vector_t() {
@@ -135,20 +132,20 @@ public:
    * @param active If true, it retrieves the active elements, otherwise the inactive elements.
    */
   void getActiveElements(type_t*& elems, size_t& size) const {
-    size = vector.get_tail();
+    size = this->getVectorSize();
     elems = vector.data;
   }
 
-  inline bool empty() const { return vector.empty(); }
+  inline bool empty() const { return this->getVectorSize() == 0; }
 
   bool insert(type_t val) {
-    vector.data[(*(vector.tail))++] = val;
+    q.submit([&](sycl::handler& cgh) { cgh.single_task([=, data = vector.data, tail = vector.tail]() { data[(*(tail))++] = val; }); }).wait();
     return true;
   }
 
   bool insert(type_t val, size_t idx) {
-    if (idx >= vector.get_tail()) { return false; }
-    vector.data[idx] = val;
+    if (idx >= this->getVectorSize()) { return false; }
+    q.submit([&](sycl::handler& cgh) { cgh.single_task([=, data = vector.data]() { data[idx] = val; }); }).wait();
     return true;
   }
 
@@ -158,13 +155,17 @@ public:
 
   inline void merge(frontier_bitmap_t<type_t>& other) { throw std::runtime_error("Not implemented"); }
 
-  inline void clear() { vector.set_tail(0); }
+  inline void clear() { q.fill(vector.tail, 0, 1).wait(); }
+
+  inline type_t* getVector() const { return vector.data; }
+
+  inline size_t getVectorSize() const {
+    uint32_t size;
+    q.copy(vector.tail, &size, 1).wait();
+    return size;
+  }
 
   const device_vector_frontier_t<type_t>& getDeviceFrontier() const { return vector; }
-
-  const local_vector_frontier_t<type_t> getLocalFrontier(sycl::handler& cgh) const {
-    return local_vector_frontier_t<type_t>(types::detail::MAX_LOCAL_MEM_SIZE, cgh);
-  }
 
 private:
   sycl::queue& q; ///< The SYCL queue used for memory allocation.
