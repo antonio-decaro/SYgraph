@@ -93,7 +93,8 @@ sygraph::Event vertices(GraphT& graph, LambdaT&& functor) {
  * and functor. It supports different types of load balancers and invokes the appropriate
  * implementation based on the load balancer type.
  *
- * @param Direction The direction of the operation (push or pull).
+ * @tparam Direction The traversal direction (`push`, `pull`, or `pull_all`). Only honored by the `workgroup_mapped` and
+ *                   `bucketing` load balancers; `workitem_mapped` always performs a push advance.
  * @tparam Lb The type of load balancer to use. Must be one of the values from
  *            `sygraph::operators::load_balancer`.
  * @tparam InView The type of the input frontier view.
@@ -107,11 +108,13 @@ sygraph::Event vertices(GraphT& graph, LambdaT&& functor) {
  * @param in The input frontier.
  * @param out The output frontier.
  * @param functor The functor to apply to each element in the frontier.
- * @param expected_size The expected number of active elements in the input frontier. If not provided, it is set to 0, meaning unkown size.
+ * @param expected_size The expected number of active elements in the input frontier. If not provided, it is set to
+ *                      `frontier::size::fetch_from_memory` (-1), meaning that the actual size is fetched from memory. If it is
+ *                      set to `frontier::size::infer_from_device` (0), the size is unknown and all the GPU processing units are used.
  *
  * @return A `sygraph::Event` representing the completion of the frontier processing.
  *
- * @throws std::runtime_error If the specified load balancer is not implemented.
+ * @throws std::runtime_error If the specified load balancer is not implemented (e.g., `subgroup_mapped`).
  */
 template<sygraph::operators::direction Direction,
          sygraph::operators::load_balancer Lb,
@@ -171,7 +174,8 @@ sygraph::Event frontier(GraphT& graph,
  * a specified load balancer and input view type to manage the processing. The function returns
  * an event representing the completion of the operation. The output is not stored in any frontier.
  *
- * @param Direction The direction of the operation (push or pull).
+ * @tparam Direction The traversal direction (`push`, `pull`, or `pull_all`). Only honored by the `workgroup_mapped` and
+ *                   `bucketing` load balancers; `workitem_mapped` always performs a push advance.
  * @tparam Lb The load balancer type to be used.
  * @tparam InView The input view type of the frontier.
  * @tparam GraphT The type of the graph.
@@ -182,8 +186,9 @@ sygraph::Event frontier(GraphT& graph,
  * @param graph The graph to be processed.
  * @param in The input frontier to be processed.
  * @param functor The functor to be applied to the frontier.
- * @param expected_size The expected number of active elements in the input frontier. If not provided, it is set to -1, meaning that it needs to fetch
- * the actual size. If it is set to 0 it means unkown size, and will use all the GPU processing units.
+ * @param expected_size The expected number of active elements in the input frontier. If not provided, it is set to
+ * `frontier::size::fetch_from_memory` (-1), meaning that the actual size is fetched from memory. If it is set to
+ * `frontier::size::infer_from_device` (0), the size is unknown and all the GPU processing units are used.
  *
  * @return An event representing the completion of the frontier processing.
  */

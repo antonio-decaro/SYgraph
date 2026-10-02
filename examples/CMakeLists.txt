@@ -52,7 +52,7 @@ endif()
 if (CMAKE_CXX_COMPILER MATCHES ".*dpcpp.*" OR CMAKE_CXX_COMPILER MATCHES ".*clang.*" OR CMAKE_CXX_COMPILER MATCHES ".*icpx.*")
   if (DEFINED ARCH AND NOT ARCH STREQUAL "")
     message("AOT Compilation")
-    set(CMAKE_CXX_FLAGS "${CMAXE_CXX_FLAGS} -fsycl -fsycl-targets=${ARCH}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsycl -fsycl-targets=${ARCH}")
   else()
     message("JIT Compilation")
     # Identify the available targets

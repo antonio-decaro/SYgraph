@@ -41,15 +41,16 @@ Ensure you have the following dependencies:
 - **CMake** 3.18 or higher
 - **SYCL Compiler** (e.g., [DPC++](https://www.intel.com/content/www/us/en/developer/tools/oneapi/dpc-compiler.html), [AdaptiveCpp](https://adaptivecpp.github.io))
 - **C++ 20**
-- **Doxygen** >= 1.9.1 (optional)
+- **Doxygen** >= 1.9.1 (optional, only needed with `SYGRAPH_DOCS=ON`; if missing, the build downloads a pinned Doxygen 1.16.1 binary on Linux x86_64 hosts)
 
 ### Install SYgraph
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/unisa-hpc/SYgraph.git
+   git clone --recurse-submodules https://github.com/unisa-hpc/SYgraph.git
    cd SYgraph
    ```
+   The `datasets` directory is a git submodule. If you already cloned without `--recurse-submodules`, run `git submodule update --init`.
 2. Configure and build the project:
    ```bash
    cmake -S . -B build -DCMAKE_CXX_COMPILER=/path/to/sycl/compiler
@@ -97,7 +98,7 @@ $ ./SYgraph/build/bin/bfs -m ./SYgraph/datasets/hollywood-2009/hollywood-2009.mt
 ```
 
 ### Dataset Manager
-Under the `/datasets` directory, there is a script called `manager.py` that is essential for various dataset-related operations. This script supports tasks such as:
+Under the `/datasets` directory (a git submodule, see [Install SYgraph](#install-sygraph)), there is a script called `manager.py` that is essential for various dataset-related operations. This script supports tasks such as:
 - Downloading datasets;
 - Converting datasets into a binary format;
 - Viewing details about each dataset.
@@ -115,6 +116,8 @@ The `Advance` primitive accepts a `Direction` template parameter of type `sygrap
 | `direction::pull_all` | Inverse graph — for each vertex, scan **all** in-neighbours regardless of how many succeed | No |
 
 `direction::pull` is the right choice when a single contributing source is enough (e.g., BFS, SSSP relaxation). Use `direction::pull_all` when the functor must be applied to every valid source edge (e.g., aggregation kernels, PageRank-style accumulation).
+
+The `Direction` parameter is honored only by the `load_balancer::workgroup_mapped` and `load_balancer::bucketing` load balancers. `load_balancer::workitem_mapped` always performs a push advance, and `load_balancer::subgroup_mapped` is not implemented yet (it throws `std::runtime_error`). If `Direction` is omitted, the advance defaults to `direction::push`.
 
 ```cpp
 // Push: spread active vertices to their neighbours
@@ -143,8 +146,8 @@ sygraph::operators::advance::frontier<
 The following CMake cache variables are currently supported by the build.
 |Option|Type|Default|Description|
 |-|-|-|-|
-|SYGRAPH_BITMAP_SIZE|Integer|32|Bitmap size in bits. It should match the sub-group (i.e., warp, wavefront) size.|
-|SYGRAPH_CU_SIZE|Integer|512|Number of threads (`X`) in a compute-unit of the target architecture.|
+|SYGRAPH_BITMAP_SIZE|Integer|32|Bitmap size in bits. Supported values are `32` and `64`. It should match the sub-group (i.e., warp, wavefront) size.|
+|SYGRAPH_CU_SIZE|Integer|512|Number of threads in a compute unit (work-group) of the target architecture.|
 |SYGRAPH_BUILD_EXAMPLES|Boolean|OFF|Builds the example executables. When this is `ON`, the example-specific cache variables `GRAPH_LOCATION` and `ARCH` are also available. `ARCH` is optional and is only needed for oneAPI AOT compilation.|
 |SYGRAPH_ENABLE_PROFILING|Boolean|OFF|Enables kernel profiling.|
 |SYGRAPH_ENABLE_PREFETCH|Boolean|OFF|Enable runtime to prefetch shared memory allocation. Turn it OFF for compatibility.|
