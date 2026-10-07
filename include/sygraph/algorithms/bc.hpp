@@ -26,6 +26,8 @@ struct BCInstance {
   using vertex_t = typename GraphType::vertex_t;
   using edge_t = typename GraphType::edge_t;
   using weight_t = typename GraphType::weight_t;
+  /// Path counts, dependencies and centrality are fractional, so they are not stored in an integral weight type.
+  using centrality_t = std::conditional_t<std::is_floating_point_v<weight_t>, weight_t, float>;
 
   const vertex_t invalid = std::numeric_limits<vertex_t>::max();
 
@@ -33,26 +35,26 @@ struct BCInstance {
   vertex_t source;
 
   vertex_t* labels;
-  weight_t* deltas;
-  weight_t* sigmas;
-  weight_t* bc_values;
+  centrality_t* deltas;
+  centrality_t* sigmas;
+  centrality_t* bc_values;
 
   BCInstance(GraphType& G, const vertex_t source) : G(G), source(source) {
     sycl::queue& queue = G.getQueue();
     size_t size = G.getVertexCount();
 
     labels = sygraph::memory::detail::memoryAlloc<vertex_t, memory::space::device>(size, queue);
-    deltas = sygraph::memory::detail::memoryAlloc<weight_t, memory::space::device>(size, queue);
-    sigmas = sygraph::memory::detail::memoryAlloc<weight_t, memory::space::device>(size, queue);
-    bc_values = sygraph::memory::detail::memoryAlloc<weight_t, memory::space::device>(size, queue);
+    deltas = sygraph::memory::detail::memoryAlloc<centrality_t, memory::space::device>(size, queue);
+    sigmas = sygraph::memory::detail::memoryAlloc<centrality_t, memory::space::device>(size, queue);
+    bc_values = sygraph::memory::detail::memoryAlloc<centrality_t, memory::space::device>(size, queue);
 
     queue.fill(labels, static_cast<vertex_t>(this->invalid), size);
-    queue.fill(deltas, static_cast<weight_t>(0), size);
-    queue.fill(sigmas, static_cast<weight_t>(0), size);
-    queue.fill(bc_values, static_cast<weight_t>(0), size);
+    queue.fill(deltas, static_cast<centrality_t>(0), size);
+    queue.fill(sigmas, static_cast<centrality_t>(0), size);
+    queue.fill(bc_values, static_cast<centrality_t>(0), size);
     queue.wait_and_throw();
 
-    queue.fill(&sigmas[source], static_cast<weight_t>(1), 1);
+    queue.fill(&sigmas[source], static_cast<centrality_t>(1), 1);
     queue.fill(&labels[source], static_cast<vertex_t>(0), 1);
     queue.wait_and_throw();
   }
@@ -83,6 +85,8 @@ class BC {
   using weight_t = typename GraphType::weight_t;
 
 public:
+  using centrality_t = typename detail::BCInstance<GraphType>::centrality_t;
+
   BC(GraphType& g) : _g(g) {};
 
   /**
@@ -130,9 +134,9 @@ public:
 
     vertex_t invalid = _instance->invalid;
     vertex_t* labels = _instance->labels;
-    weight_t* deltas = _instance->deltas;
-    weight_t* sigmas = _instance->sigmas;
-    weight_t* bc_values = _instance->bc_values;
+    centrality_t* deltas = _instance->deltas;
+    centrality_t* sigmas = _instance->sigmas;
+    centrality_t* bc_values = _instance->bc_values;
 
     using frontier_state_t = typename decltype(in_frontier)::frontier_state_type;
     std::vector<frontier_state_t> frontiers_states;
@@ -197,6 +201,21 @@ public:
     using direction_t = sygraph::operators::direction;
     using frontier_view_t = sygraph::frontier::frontier_view;
     using frontier_impl_t = sygraph::frontier::frontier_type;
+  }
+
+  /**
+   * @brief Returns the betweenness centrality computed by the last run.
+   *
+   * The value of a vertex v is the dependency of the source s on v: the sum, over every target t, of the fraction of
+   * shortest s-t paths that pass through v. The source and the vertices it cannot reach have centrality 0.
+   *
+   * @return A vector with the centrality of each vertex.
+   */
+  std::vector<centrality_t> getCentrality() const {
+    if (!_instance) { throw std::runtime_error("BC instance not initialized"); }
+    std::vector<centrality_t> values(_instance->G.getVertexCount());
+    _instance->G.getQueue().copy(_instance->bc_values, values.data(), values.size()).wait();
+    return values;
   }
 
 protected:

@@ -21,7 +21,9 @@ add_executable(filter_compute operators/filter_compute.cpp)
 add_executable(filter_compute_semantics operators/filter_compute_semantics.cpp)
 add_executable(intersection_operator operators/intersection.cpp)
 add_executable(bfs_algorithm algorithms/bfs.cpp)
+add_executable(bfs_random algorithms/bfs_random.cpp)
 add_executable(sssp_algorithm algorithms/sssp.cpp)
+add_executable(sssp_random algorithms/sssp_random.cpp)
 add_executable(cc_algorithm algorithms/cc.cpp)
 add_executable(tc_algorithm algorithms/tc.cpp)
 add_executable(bc_algorithm algorithms/bc.cpp)
@@ -167,8 +169,20 @@ add_test(
 )
 
 add_test(
+  NAME bfs_random
+  COMMAND bfs_random
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
   NAME sssp_algorithm
   COMMAND sssp_algorithm
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
+  NAME sssp_random
+  COMMAND sssp_random
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
@@ -211,7 +225,9 @@ set_tests_properties(
   filter_compute_semantics
   intersection_operator
   bfs_algorithm
+  bfs_random
   sssp_algorithm
+  sssp_random
   cc_algorithm
   tc_algorithm
   bc_algorithm

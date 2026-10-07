@@ -93,6 +93,17 @@ SYCL_EXTERNAL inline T min(T* v1, T* v2) {
  * @param desired The value to be set at ptr if the comparison is successful.
  * @return true if the swap was successful, false otherwise.
  */
+/**
+ * @brief Atomically sets `*ptr` to the maximum of its value and `val`.
+ *
+ * @return The value of `*ptr` before the operation.
+ */
+template<typename T>
+SYCL_EXTERNAL inline T max(T* ptr, T val) {
+  sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device> ref(*ptr);
+  return ref.fetch_max(val);
+}
+
 template<typename T>
 SYCL_EXTERNAL inline bool cas(T* ptr, T& expected, T desired) {
   sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device> ref(*ptr);

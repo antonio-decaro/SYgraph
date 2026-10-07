@@ -87,7 +87,7 @@ public:
    * @param G The graph on which the CC algorithm will be performed.
    * @param source The source vertex for the CC algorithm.
    */
-  void init(vertex_t& source) { _instance = std::make_unique<detail::CCInstance<GraphType>>(_g, source); }
+  void init(vertex_t source) { _instance = std::make_unique<detail::CCInstance<GraphType>>(_g, source); }
 
   /**
    * @brief Resets the CC algorithm.
@@ -134,13 +134,9 @@ public:
 
     auto e1 = sygraph::operators::advance::vertices<load_balance_t::workgroup_mapped, frontier_view_t::vertex>(
         G, in_frontier, [=](auto src, auto dst, auto edge, auto weight) -> bool {
+          // Atomic max: a plain load/compare/store lets a smaller label overwrite a larger one.
           vertex_t src_label = sygraph::sync::load(&labels[src]);
-          vertex_t dst_label = sygraph::sync::load(&labels[dst]);
-          if (dst_label < src_label) {
-            sygraph::sync::store(&labels[dst], src_label);
-            return true;
-          }
-          return false;
+          return sygraph::sync::max(&labels[dst], src_label) < src_label;
         });
     e1.waitAndThrow();
 
@@ -149,12 +145,7 @@ public:
       auto e1 = sygraph::operators::advance::frontier<load_balance_t::workgroup_mapped, frontier_view_t::vertex, frontier_view_t::vertex>(
           G, in_frontier, out_frontier, [=](auto src, auto dst, auto edge, auto weight) -> bool {
             vertex_t src_label = sygraph::sync::load(&labels[src]);
-            vertex_t dst_label = sygraph::sync::load(&labels[dst]);
-            if (dst_label < src_label) {
-              sygraph::sync::store(&labels[dst], src_label);
-              return true;
-            }
-            return false;
+            return sygraph::sync::max(&labels[dst], src_label) < src_label;
           });
       e1.waitAndThrow();
 
@@ -169,21 +160,17 @@ public:
   }
 
   /**
-   * @brief Returns the distances from the source vertex to a vertex in the graph.
+   * @brief Returns the component label of every vertex.
    *
-   * @param vertex The vertex for which to get the distance.
-   * @return A pointer to the array of distances.
-   */
-
-  /**
-   * @brief Returns the parent vertices for a vertex in the graph.
+   * Vertices in the same connected component share a label: the largest vertex id of the component.
    *
-   * @param vertex The vertex for which to get the parent vertices.
-   * @return A pointer to the array of parent vertices.
+   * @return A vector with the label of each vertex.
    */
-  vertex_t getParents(size_t vertex) const {
-    throw std::runtime_error("Not implemented");
-    return _instance->parents[vertex];
+  std::vector<vertex_t> getLabels() const {
+    if (!_instance) { throw std::runtime_error("CC instance not initialized"); }
+    std::vector<vertex_t> labels(_instance->G.getVertexCount());
+    _instance->G.getQueue().copy(_instance->labels, labels.data(), labels.size()).wait();
+    return labels;
   }
 
 private:

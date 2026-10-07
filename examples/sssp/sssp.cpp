@@ -29,7 +29,7 @@ bool validate(const GraphT& graph, BenchT& sssp, uint source) {
   auto* column_indices = graph.getColumnIndices();
   auto* nonzero_values = graph.getValues();
 
-  std::vector<weight_t> distances(graph.getVertexCount(), graph.getVertexCount() + 1);
+  std::vector<weight_t> distances(graph.getVertexCount(), BenchT::unreachable());
   distances[source] = 0;
 
   std::priority_queue<std::pair<vertex_t, weight_t>, std::vector<std::pair<vertex_t, weight_t>>, Prioritize<vertex_t, weight_t>> pq;
@@ -55,9 +55,10 @@ bool validate(const GraphT& graph, BenchT& sssp, uint source) {
     }
   }
 
+  const auto computed = sssp.getDistances();
   for (auto i = 0; i < graph.getVertexCount(); i++) {
-    if (distances[i] != sssp.getDistance(i)) {
-      std::cerr << "Mismatch at vertex " << i << " | Expected: " << distances[i] << " | Got: " << sssp.getDistance(i) << std::endl;
+    if (distances[i] != computed[i]) {
+      std::cerr << "Mismatch at vertex " << i << " | Expected: " << distances[i] << " | Got: " << computed[i] << std::endl;
       return false;
     }
   }
