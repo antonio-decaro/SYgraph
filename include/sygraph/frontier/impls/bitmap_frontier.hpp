@@ -420,7 +420,7 @@ public:
                          if (group.leader()) { local_size_ref.store(0); }
                          sycl::group_barrier(group);
 
-                         if (bitmap.getData()[gid] != 0) { local_offsets[local_size_ref++] = gid; }
+                         if (gid < size && bitmap.getData()[gid] != 0) { local_offsets[local_size_ref++] = gid; }
                          sycl::group_barrier(group);
 
                          size_t data_offset = 0;

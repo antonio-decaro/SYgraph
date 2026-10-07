@@ -100,9 +100,9 @@ public:
         } else {
           ++dst_it;
         }
-
-        if (local_triangles > 0) { sygraph::sync::atomicFetchAdd<uint32_t>(triangles + u, local_triangles); }
       }
+
+      if (local_triangles > 0) { sygraph::sync::atomicFetchAdd<uint32_t>(triangles + u, local_triangles); }
       return false;
     });
 
@@ -128,7 +128,7 @@ public:
 
     queue
         .submit([&](sycl::handler& cgh) {
-          auto red = sycl::reduction(sum_buff, cgh, sycl::plus<uint32_t>());
+          auto red = sycl::reduction(sum_buff, cgh, sycl::plus<uint32_t>(), sycl::property::reduction::initialize_to_identity{});
           cgh.parallel_for(sycl::range{num_nodes}, red, [=](sycl::id<1> idx, auto& sum) { sum += triangles[idx]; });
         })
         .wait();
