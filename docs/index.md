@@ -11,7 +11,7 @@ SYgraph is a high-performance graph analytics framework built using [SYCL](https
 
 ## Introduction
 
-SYgraph is intended for researchers and developers focused on high-performance computing (HPC) and graph analytics, providing specialized data structures and mechanisms tailored to GPU execution. This project is especially valuable for applications requiring highly optimized graph traversal and manipulation, making it suitable for large-scale data analysis and machine learning workflows.
+SYgraph is intended for researchers and developers focused on high-performance computing (HPC) and graph analytics, providing specialized data structures and mechanisms tailored to GPU execution. This project is especially valuable for applications requiring highly optimized graph traversal and manipulation, making it suitable for large-scale data analysis and machine-learning workflows.
 
 ## Features
 
@@ -34,15 +34,16 @@ Ensure you have the following dependencies:
 - **CMake** 3.18 or higher
 - **SYCL Compiler** (e.g., [DPC++](https://www.intel.com/content/www/us/en/developer/tools/oneapi/dpc-compiler.html), [AdaptiveCpp](https://adaptivecpp.github.io))
 - **C++ 20**
-- **Doxygen** >= 1.9.1 (optional)
+- **Doxygen** >= 1.9.1 (optional, only needed with `SYGRAPH_DOCS=ON`; if missing, the build downloads a pinned Doxygen 1.16.1 binary on Linux x86_64 hosts)
 
 ### Install SYgraph
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/unisa-hpc/SYgraph.git
+   git clone --recurse-submodules https://github.com/unisa-hpc/SYgraph.git
    cd SYgraph
    ```
+   The `datasets` directory is a git submodule. If you already cloned without `--recurse-submodules`, run `git submodule update --init`.
 2. Configure and build the project:
    ```bash
    cmake -S . -B build -DCMAKE_CXX_COMPILER=/path/to/sycl/compiler
@@ -76,7 +77,7 @@ After cloning the repository you can build the example projects with the followi
    The build files will be in the `build/bin` folder.
 
 ## Usage
-Since SYgraph is a header-only library, you simply need to include the following in your code:
+Since SYgraph is a header-only library, you need to include the following in your code:
 
 ```c++
 #include <sygraph/sygraph.hpp>
@@ -90,7 +91,7 @@ $ ./SYgraph/build/bin/bfs -m ./SYgraph/datasets/hollywood-2009/hollywood-2009.mt
 ```
 
 ### Dataset Manager
-Under the `/datasets` directory, there is a script called `manager.py` that is essential for various dataset-related operations. This script supports tasks such as:
+Under the `/datasets` directory (a git submodule, see [Install SYgraph](#install-sygraph)), there is a script called `manager.py` that is essential for various dataset-related operations. This script supports tasks such as:
 - Downloading datasets;
 - Converting datasets into a binary format;
 - Viewing details about each dataset.
@@ -108,6 +109,8 @@ The `Advance` primitive accepts a `Direction` template parameter of type `sygrap
 | `direction::pull_all` | Inverse graph — for each vertex, scan **all** in-neighbours regardless of how many succeed | No |
 
 `direction::pull` is the right choice when a single contributing source is enough (e.g., BFS, SSSP relaxation). Use `direction::pull_all` when the functor must be applied to every valid source edge (e.g., aggregation kernels, PageRank-style accumulation).
+
+The `Direction` parameter is honored only by the `load_balancer::workgroup_mapped` and `load_balancer::bucketing` load balancers. `load_balancer::workitem_mapped` always performs a push advance, and `load_balancer::subgroup_mapped` is not implemented yet (it throws `std::runtime_error`). If `Direction` is omitted, the advance defaults to `direction::push`.
 
 ```cpp
 // Push: spread active vertices to their neighbours
@@ -136,12 +139,18 @@ sygraph::operators::advance::frontier<
 The following CMake cache variables are currently supported by the build.
 |Option|Type|Default|Description|
 |-|-|-|-|
-|SYGRAPH_BITMAP_SIZE|Integer|32|Bitmap size in bits. It should match the sub-group (i.e., warp, wavefront) size.|
-|SYGRAPH_CU_SIZE|Integer|512|Number of threads (`X`) in a compute-unit of the target architecture.|
+|SYGRAPH_BITMAP_SIZE|Integer|32|Bitmap size in bits. Supported values are `32` and `64`. It should match the sub-group (i.e., warp, wavefront) size.|
+|SYGRAPH_CU_SIZE|Integer|512|Number of threads in a compute unit (work-group) of the target architecture.|
 |SYGRAPH_BUILD_EXAMPLES|Boolean|OFF|Builds the example executables. When this is `ON`, the example-specific cache variables `GRAPH_LOCATION` and `ARCH` are also available. `ARCH` is optional and is only needed for oneAPI AOT compilation.|
 |SYGRAPH_ENABLE_PROFILING|Boolean|OFF|Enables kernel profiling.|
 |SYGRAPH_ENABLE_PREFETCH|Boolean|OFF|Enable runtime to prefetch shared memory allocation. Turn it OFF for compatibility.|
 |SYGRAPH_BUILD_TESTS|Boolean|OFF|Builds tests.|
-|SYGRAPH_DOCS|Boolean|ON|Generates the `doc` target and installs the generated documentation. If Doxygen is not already installed, the build tries to bootstrap a pinned Doxygen binary on Linux x86_64 hosts.|
+|SYGRAPH_DOCS|Boolean|OFF|Generates the `doc` target and installs the generated documentation. If Doxygen is not already installed, the build tries to bootstrap a pinned Doxygen binary on Linux x86_64 hosts.|
 |GRAPH_LOCATION|String|device|Example-only option that selects graph placement: `host`, `device`, or `shared`. Available only when `SYGRAPH_BUILD_EXAMPLES=ON`.|
 |ARCH|String|empty|Optional target passed to `-fsycl-targets` for oneAPI AOT compilation in examples and tests (for example `nvptx64-nvidia-cuda` or `spir64`).|
+
+## Contributing
+We welcome contributions! If you have improvements or bug fixes, please fork the repository and open a pull request against the `develop` branch. Ensure your changes are tested on multiple backends where possible.
+
+## License
+This project is licensed under the Apache License 2.0. See the [LICENSE](https://github.com/unisa-hpc/SYgraph/blob/main/LICENSE) file for details.
