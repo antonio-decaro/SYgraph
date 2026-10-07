@@ -25,7 +25,7 @@ void run_bfs(GraphT& G) {
   visited[0] = true;
 
   while (!in_frontier.empty()) {
-    sygraph::operators::advance::frontier<LoadBalancer, frontier_view_t::vertex, frontier_view_t::vertex>(
+    auto e = sygraph::operators::advance::frontier<LoadBalancer, frontier_view_t::vertex, frontier_view_t::vertex>(
         G, in_frontier, out_frontier, [=](auto u, auto v, auto, auto) -> bool {
           if (!visited[v]) {
             visited[v] = true;
@@ -34,6 +34,7 @@ void run_bfs(GraphT& G) {
           }
           return false;
         });
+    e.waitAndThrow();
     sygraph::frontier::swap(in_frontier, out_frontier);
     out_frontier.clear();
   }

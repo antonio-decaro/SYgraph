@@ -54,6 +54,7 @@ struct BucketingContext : AdvanceContextBase<IFW, OFW, Direction, InFrontierDevT
     if constexpr (IFW == sygraph::frontier::frontier_view::vertex) {
       const uint16_t bitmap_range = this->in_dev_frontier.getBitmapRange();
       const uint32_t actual_id_offset = (state.group_offset * state.coarsening_factor) + (state.item.get_local_linear_id() / bitmap_range);
+      if (actual_id_offset >= state.offsets_size) { return this->limit; }
       const int* bitmap_offsets = this->in_dev_frontier.getOffsets();
       const auto assigned_vertex = (bitmap_offsets[actual_id_offset] * bitmap_range) + (state.item.get_local_linear_id() % bitmap_range);
       return assigned_vertex;

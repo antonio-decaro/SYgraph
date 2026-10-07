@@ -1,0 +1,95 @@
+# Copyright (c) 2025 University of Salerno
+# SPDX-License-Identifier: Apache-2.0
+
+# GitHub-hosted runners have no GPU, so the library is built with the Intel oneAPI DPC++ compiler
+# and the test suite runs on the Intel OpenCL CPU device. This checks compilation and functional
+# correctness of the operators and algorithms; it does not measure GPU performance.
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: oneAPI CPU (BITMAP_SIZE=${{ matrix.bitmap_size }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - bitmap_size: 32
+            cu_size: 512
+          # The CPU device reports a sub-group size of 4, so 64-bit bitmaps with the default CU_SIZE
+          # would request work-groups whose local memory exceeds what the device provides.
+          - bitmap_size: 64
+            cu_size: 128
+    defaults:
+      run:
+        shell: bash -el {0}
+    env:
+      # Fail instead of silently skipping when no SYCL device is found.
+      SYGRAPH_TEST_REQUIRE_DEVICE: "1"
+      ONEAPI_DEVICE_SELECTOR: "opencl:cpu"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install oneAPI DPC++ and the OpenCL CPU runtime
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: sygraph-ci
+          create-args: >-
+            dpcpp_linux-64=2026.1.1
+            intel-opencl-rt=2026.1.1
+            cmake
+            ninja
+          cache-downloads: true
+
+      - name: List SYCL devices
+        run: sycl-ls
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_CXX_COMPILER=icpx
+          -DCMAKE_BUILD_TYPE=Release
+          -DSYGRAPH_BUILD_TESTS=ON
+          -DSYGRAPH_BUILD_EXAMPLES=ON
+          -DARCH=spir64
+          -DSYGRAPH_BITMAP_SIZE=${{ matrix.bitmap_size }}
+          -DSYGRAPH_CU_SIZE=${{ matrix.cu_size }}
+
+      - name: Build tests and examples
+        run: cmake --build build -j "$(nproc)"
+
+      - name: Run tests
+        run: ctest --test-dir build/tests --output-on-failure --timeout 300
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Doxygen
+        run: sudo apt-get update && sudo apt-get install -y doxygen graphviz
+
+      - name: Build documentation
+        run: |
+          cmake -S . -B build -DSYGRAPH_DOCS=ON
+          cmake --build build --target doc
+
+      - name: Upload documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: sygraph-docs
+          path: build/docs

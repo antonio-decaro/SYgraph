@@ -285,14 +285,14 @@ public:
   }
 
   inline const size_t size() const {
-    sycl::buffer<size_t, 1> size_buf(sycl::range<1>(1));
+    size_t active_count = 0;
+    sycl::buffer<size_t, 1> size_buf(&active_count, sycl::range<1>(1));
     size_t frontier_size = this->getBitmapSize();
     size_t bitmap_range = this->getBitmapRange();
     auto e = _queue.submit([&](sycl::handler& cgh) {
       auto bitmap = this->getDeviceFrontier();
-      auto size_acc = size_buf.get_access<sycl::access::mode::write>(cgh);
+      auto size_acc = size_buf.get_access<sycl::access::mode::read_write>(cgh);
       cgh.parallel_for<compute_size_mlb_frontier_kernel>(sycl::range<1>{frontier_size}, [=](sycl::id<1> idx) {
-        if (idx[0] == 0) { size_acc[0] = 0; }
         sycl::atomic_ref<size_t, sycl::memory_order::relaxed, sycl::memory_scope::device> ref(size_acc[0]);
         size_t num_active_nodes = 0;
         bitmap_type t = bitmap.getData()[idx];
@@ -389,6 +389,7 @@ public:
     sycl::range<1> local_range{types::detail::COMPUTE_UNIT_SIZE};
     auto bitmap = this->getDeviceFrontier();
     size_t size = bitmap.getBitmapSize(1);
+    size_t level0_size = bitmap.getBitmapSize(0);
     uint32_t range = bitmap.getBitmapRange();
     // sycl::range<1> global_range{(size > local_range[0] ? size + local_range[0] - (size % local_range[0]) : local_range[0])};
     size_t global_size = sygraph::detail::device::getNumComputeUnits(_queue) * local_range[0];
@@ -412,7 +413,7 @@ public:
             sycl::group_barrier(group);
             for (uint32_t gid = item.get_global_linear_id(); gid < size; gid += item.get_global_range(0)) {
               bitmap_type data = bitmap.getData(1)[gid];
-              for (size_t i = 0; i < range; i++) {
+              for (size_t i = 0; i < range && i + (gid * range) < level0_size; i++) {
                 bool is_active = (data & (static_cast<bitmap_type>(1) << i)) != 0;
                 uint32_t pos;
                 if ((!invert && !is_active)
