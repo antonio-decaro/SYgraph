@@ -26,6 +26,8 @@ namespace filter {
  * @brief Applies an in-place filter operation on the given graph using the specified functor.
  *
  * This function launches a bitmap kernel to perform the filter operation in-place on the graph.
+ * Every element of the frontier for which `functor(element)` returns true is REMOVED from the frontier; the others are
+ * kept. Note that this is the opposite of external(), which keeps the elements for which the functor returns true.
  *
  * @tparam GraphT The type of the graph, which must satisfy the GraphConcept.
  * @tparam T The type of the elements in the frontier.
@@ -34,7 +36,7 @@ namespace filter {
  *
  * @param graph The graph on which the filter operation is to be performed.
  * @param frontier The frontier containing the elements to be filtered.
- * @param functor The functor to be applied for the filter operation.
+ * @param functor The functor to be applied for the filter operation; returning true removes the element.
  *
  * @return An Event object representing the status of the filter operation.
  */
@@ -47,6 +49,8 @@ sygraph::Event inplace(GraphT& graph, const sygraph::frontier::Frontier<T, Front
  * @brief Applies a filter operation on the input frontier and stores the result in the output frontier.
  *
  * This function uses an external bitmap to perform the filtering operation on the given graph.
+ * The output frontier is cleared first, then every element of the input frontier for which `functor(element)` returns
+ * true is inserted into it. The input frontier is not modified.
  *
  * @tparam GraphT The type of the graph.
  * @tparam T The type of the elements in the frontier.

@@ -77,7 +77,7 @@ sygraph::Event launchBitmapKernel(GraphT& graph,
   });
 }
 
-template<frontier::frontier_view FW, graph::detail::GraphConcept GraphT, typename T, typename R, typename LambdaT>
+template<frontier::frontier_view FW, typename ReductionOperator, graph::detail::GraphConcept GraphT, typename T, typename R, typename LambdaT>
 sygraph::Event launchBitmapReduce(GraphT& graph,
                                   const sygraph::frontier::Frontier<T, frontier::frontier_type::mlb>& frontier,
                                   R& accumulator,
@@ -96,8 +96,8 @@ sygraph::Event launchBitmapReduce(GraphT& graph,
   accumulator_buf.set_write_back(true);
 
   return q.submit([&](sycl::handler& cgh) {
-    auto sum_reduction = sycl::reduction<R>(accumulator_buf, cgh, sycl::plus<R>());
-    cgh.parallel_for(sycl::nd_range<1>{config.global, config.local}, sum_reduction, [=](sycl::nd_item<1> item, auto& acc) {
+    auto reduction = sycl::reduction<R>(accumulator_buf, cgh, ReductionOperator{});
+    cgh.parallel_for(sycl::nd_range<1>{config.global, config.local}, reduction, [=](sycl::nd_item<1> item, auto& acc) {
       auto lid = item.get_local_id();
       auto group_id = item.get_group_linear_id();
       auto local_size = item.get_local_range()[0];

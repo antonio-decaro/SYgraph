@@ -155,6 +155,74 @@ std::vector<int> activeOffsets(sycl::queue& q, const FrontierT& frontier) {
   return offsets;
 }
 
+// Deterministic graph generators. They build the CSR directly (sorted adjacency lists, no self-loops, no duplicate
+// edges) and use their own PRNG so the graphs are identical with every standard library.
+namespace gen {
+
+using csr_t = sygraph::formats::CSR<uint, uint, uint>;
+
+struct Edge {
+  uint u;
+  uint v;
+  uint w;
+};
+
+inline uint64_t splitmix64(uint64_t& state) {
+  uint64_t z = (state += 0x9e3779b97f4a7c15ULL);
+  z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+  z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+  return z ^ (z >> 31);
+}
+
+// Undirected graphs store every edge in both directions with the same weight.
+inline csr_t csrFromEdges(size_t n, std::vector<Edge> edges, bool directed) {
+  std::erase_if(edges, [](const Edge& e) { return e.u == e.v; });
+  if (!directed) {
+    for (auto& e : edges) {
+      if (e.u > e.v) { std::swap(e.u, e.v); }
+    }
+  }
+  auto by_endpoints = [](const Edge& a, const Edge& b) { return a.u != b.u ? a.u < b.u : a.v < b.v; };
+  auto same_endpoints = [](const Edge& a, const Edge& b) { return a.u == b.u && a.v == b.v; };
+  std::stable_sort(edges.begin(), edges.end(), by_endpoints);
+  edges.erase(std::unique(edges.begin(), edges.end(), same_endpoints), edges.end());
+  if (!directed) {
+    const size_t m = edges.size();
+    for (size_t i = 0; i < m; ++i) { edges.push_back({edges[i].v, edges[i].u, edges[i].w}); }
+    std::sort(edges.begin(), edges.end(), by_endpoints);
+  }
+
+  std::vector<uint> offsets(n + 1, 0);
+  std::vector<uint> columns;
+  std::vector<uint> weights;
+  for (const auto& e : edges) {
+    offsets[e.u + 1]++;
+    columns.push_back(e.v);
+    weights.push_back(e.w);
+  }
+  for (size_t i = 0; i < n; ++i) { offsets[i + 1] += offsets[i]; }
+  return csr_t{offsets, columns, weights};
+}
+
+inline csr_t randomGraph(size_t n, size_t m, uint64_t seed, bool directed, uint max_weight = 1) {
+  std::vector<Edge> edges;
+  edges.reserve(m);
+  for (size_t i = 0; i < m; ++i) {
+    const auto u = static_cast<uint>(splitmix64(seed) % n);
+    const auto v = static_cast<uint>(splitmix64(seed) % n);
+    const auto w = static_cast<uint>(1 + splitmix64(seed) % max_weight);
+    edges.push_back({u, v, w});
+  }
+  return csrFromEdges(n, std::move(edges), directed);
+}
+
+} // namespace gen
+
+template<sygraph::memory::space Space = sygraph::memory::space::shared>
+auto buildGraph(sycl::queue& q, const gen::csr_t& csr, sygraph::graph::Properties properties = {}) {
+  return sygraph::graph::build::fromCSR<Space>(q, csr, properties);
+}
+
 // Word offsets an active-frontier computation must report: words with at least one element, or, for pull (invert),
 // words that are not completely full.
 inline std::vector<int> expectedWords(const std::vector<bool>& bits, size_t range, bool invert = false) {

@@ -15,7 +15,10 @@ add_executable(graph_teardown graph/graph_teardown.cpp)
 add_executable(advance operators/advance.cpp)
 add_executable(advance_graph operators/advance_graph.cpp)
 add_executable(advance_pull operators/advance_pull.cpp)
+add_executable(advance_push_semantics operators/advance_push_semantics.cpp)
+add_executable(advance_pull_semantics operators/advance_pull_semantics.cpp)
 add_executable(filter_compute operators/filter_compute.cpp)
+add_executable(filter_compute_semantics operators/filter_compute_semantics.cpp)
 add_executable(intersection_operator operators/intersection.cpp)
 add_executable(bfs_algorithm algorithms/bfs.cpp)
 add_executable(sssp_algorithm algorithms/sssp.cpp)
@@ -128,8 +131,26 @@ add_test(
 )
 
 add_test(
+  NAME advance_push_semantics
+  COMMAND advance_push_semantics
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
+  NAME advance_pull_semantics
+  COMMAND advance_pull_semantics
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
   NAME filter_compute_operator
   COMMAND filter_compute
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
+  NAME filter_compute_semantics
+  COMMAND filter_compute_semantics
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
@@ -184,7 +205,10 @@ set_tests_properties(
   advance_operator
   advance_graph_operator
   advance_pull_operator
+  advance_push_semantics
+  advance_pull_semantics
   filter_compute_operator
+  filter_compute_semantics
   intersection_operator
   bfs_algorithm
   sssp_algorithm

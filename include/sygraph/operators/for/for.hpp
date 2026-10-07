@@ -69,7 +69,8 @@ sygraph::Event execute(GraphT& graph,
  *
  * @param graph The graph on which the reduction is to be performed.
  * @param frontier The frontier containing the elements to be processed.
- * @param accumulator The accumulator to store the reduced result.
+ * @param accumulator The accumulator to store the reduced result. Its initial value takes part in the reduction, and
+ *                    it holds the result when the function returns.
  * @param function The function to be executed for reduction.
  * @param expected_size An optional parameter specifying the expected size of the frontier.
  *
@@ -88,7 +89,8 @@ sygraph::Event reduce(GraphT& graph,
                       R& accumulator,
                       LambdaT&& function,
                       frontier::size::frontier_size_t expected_size = frontier::size::fetch_from_memory) {
-  return sygraph::operators::compute::detail::launchBitmapReduce<FW>(graph, frontier, accumulator, std::forward<LambdaT>(function), expected_size);
+  return sygraph::operators::compute::detail::launchBitmapReduce<FW, ReductionOperator>(
+      graph, frontier, accumulator, std::forward<LambdaT>(function), expected_size);
 }
 
 } // namespace compute

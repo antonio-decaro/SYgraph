@@ -140,6 +140,10 @@ template<sygraph::frontier::frontier_view InFW,
          typename InFrontierT,
          typename OutFrontierT>
 inline auto prepareAdvanceLaunch(GraphT& graph, const InFrontierT& in, const OutFrontierT& out, int expected_size) {
+  // Pull visits the vertices outside the frontier, which needs the inverted active frontier only MLB provides.
+  static_assert(
+      !sygraph::operators::is_pull<Direction>() || InFW != sygraph::frontier::frontier_view::vertex || requires { in.computeActiveFrontier(true); },
+      "Pull advance requires an MLB frontier; the bitmap frontier does not support it.");
   sycl::queue& q = graph.getQueue();
   auto in_dev_frontier = in.getDeviceFrontier();
   auto out_dev_frontier = out.getDeviceFrontier();
