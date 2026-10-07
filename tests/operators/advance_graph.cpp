@@ -16,7 +16,8 @@ void run_graph_advance(GraphT& G) {
 
   auto device_graph = G.getDeviceGraph();
   sygraph::operators::advance::vertices<LoadBalancer, sygraph::frontier::frontier_view::vertex>(
-      G, out_frontier, [=](auto u, auto, auto, auto) -> bool { return device_graph.getDegree(u) != 0; });
+      G, out_frontier, [=](auto u, auto, auto, auto) -> bool { return device_graph.getDegree(u) != 0; })
+      .waitAndThrow();
   for (size_t i = 0; i < G.getVertexCount(); ++i) { visited[i] = out_frontier.check(i); }
 
   constexpr std::array<bool, 6> expected_visited{true, true, true, true, true, false};

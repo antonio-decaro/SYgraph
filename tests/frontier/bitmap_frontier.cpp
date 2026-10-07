@@ -8,7 +8,7 @@ int main() {
   auto q = sygraph::tests::makeQueue();
 
   sygraph::frontier::Frontier<size_t> f{q, NUM_ELEMS};
-  auto n = f.getNumElems();
+  auto n = f.size();
   using type = typename sygraph::frontier::Frontier<size_t>::bitmap_type;
   assert(n == 0);
   assert(sizeof(type) * sygraph::types::detail::byte_size == f.getBitmapRange());
@@ -19,10 +19,10 @@ int main() {
      cgh.parallel_for(sycl::range<1>{f.getNumElems()}, [=](sycl::id<1> idx) { bitmap.insert(idx); });
    }).wait();
 
-  n = f.getNumElems();
+  n = f.size();
   assert(n == NUM_ELEMS);
 
   f.remove(0);
-  n = f.getNumElems();
+  n = f.size();
   assert(n == NUM_ELEMS - 1);
 }
