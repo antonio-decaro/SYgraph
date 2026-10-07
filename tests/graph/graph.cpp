@@ -25,7 +25,7 @@ int main() {
 
     h.parallel_for(sycl::range<1>{G.getVertexCount()}, [=](sycl::id<1> idx) {
       auto id = idx[0];
-      nighbours_count[id] = dg.getFirstNeighbor(id);
+      nighbours_count[id] = dg.getDegree(id);
       first_neighbors[id] = dg.getFirstNeighbor(id);
     });
   });

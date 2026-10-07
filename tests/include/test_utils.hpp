@@ -37,6 +37,12 @@ inline constexpr std::string_view triangle_3 = "3\n"
                                                "1 0 1\n"
                                                "1 1 0";
 
+inline constexpr std::string_view complete_4 = "4\n"
+                                               "0 1 1 1\n"
+                                               "1 0 1 1\n"
+                                               "1 1 0 1\n"
+                                               "1 1 1 0";
+
 inline constexpr std::string_view weighted_directed_5 = "5\n"
                                                         "0 1 4 0 0\n"
                                                         "0 0 2 6 0\n"
@@ -46,14 +52,20 @@ inline constexpr std::string_view weighted_directed_5 = "5\n"
 
 } // namespace fixtures
 
+// Prefers a GPU and falls back to any available device (e.g., a CPU). Use ONEAPI_DEVICE_SELECTOR to pin a backend.
+// When no device is available the test is skipped, unless SYGRAPH_TEST_REQUIRE_DEVICE is set (as in CI), in which
+// case it fails so that a misconfigured environment cannot report green.
 inline sycl::queue makeQueue() {
-  setenv("UR_ADAPTERS_FORCE_LOAD", "opencl", 0);
   try {
     return sycl::queue{sycl::gpu_selector_v};
   } catch (const sycl::exception&) {
     try {
       return sycl::queue{sycl::default_selector_v};
     } catch (const sycl::exception&) {
+      if (std::getenv("SYGRAPH_TEST_REQUIRE_DEVICE") != nullptr) {
+        std::cerr << "No SYCL device available and SYGRAPH_TEST_REQUIRE_DEVICE is set" << std::endl;
+        std::exit(1);
+      }
       std::cout << "Skipping test: no SYCL platform available" << std::endl;
       std::exit(0);
     }
