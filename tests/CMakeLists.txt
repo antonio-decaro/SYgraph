@@ -3,6 +3,9 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 add_executable(bitmap_frontier frontier/bitmap_frontier.cpp)
 add_executable(mlb_frontier frontier/mlb_frontier.cpp)
+add_executable(mlb_semantics frontier/mlb_semantics.cpp)
+add_executable(mlb_active_frontier_large frontier/mlb_active_frontier_large.cpp)
+add_executable(bitmap_semantics frontier/bitmap_semantics.cpp)
 add_executable(csr formats/csr.cpp)
 add_executable(coo2csr_weighted formats/coo2csr.cpp)
 add_executable(coo2csr_unweighted formats/coo2csr_unweighted.cpp)
@@ -49,6 +52,24 @@ add_test(
 add_test(
   NAME test_mlb_frontier
   COMMAND mlb_frontier
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
+  NAME mlb_semantics
+  COMMAND mlb_semantics
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
+  NAME mlb_active_frontier_large
+  COMMAND mlb_active_frontier_large
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
+  NAME bitmap_semantics
+  COMMAND bitmap_semantics
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
@@ -151,6 +172,9 @@ add_test(
 set_tests_properties(
   test_bitmap_frontier
   test_mlb_frontier
+  mlb_semantics
+  mlb_active_frontier_large
+  bitmap_semantics
   test_csr_format
   coo2csr_weighted
   coo2csr_unweighted

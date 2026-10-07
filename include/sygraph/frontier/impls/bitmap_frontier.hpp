@@ -121,9 +121,9 @@ public:
   SYCL_EXTERNAL inline bool check(size_t idx) const { return _data[idx / _range] & (static_cast<bitmap_type>(1) << (idx % _range)); }
 
   SYCL_EXTERNAL inline bool empty() const {
-    bitmap_type count = static_cast<bitmap_type>(0);
-    for (auto i = 0; i < _size; i++) { count += _data[i]; }
-    return count == static_cast<bitmap_type>(0);
+    bitmap_type any = static_cast<bitmap_type>(0);
+    for (size_t i = 0; i < _size; i++) { any |= _data[i]; }
+    return any == static_cast<bitmap_type>(0);
   }
   /**
    * @brief Retrieves the bitmap index for the specified index.
@@ -397,9 +397,6 @@ public:
     sycl::range<1> local_range{types::detail::COMPUTE_UNIT_SIZE};
     size_t size = _bitmap.getBitmapSize();
     sycl::range<1> global_range{(size > local_range[0] ? size + local_range[0] - (size % local_range[0]) : local_range[0])};
-
-    size_t size_offsets = _bitmap.getOffsetsSize()[0];
-    if (size_offsets > 0) { return size_offsets; }
 
     auto e = _queue.submit([&](sycl::handler& cgh) {
       auto bitmap = this->getDeviceFrontier();

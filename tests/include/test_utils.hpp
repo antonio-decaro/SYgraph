@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstdlib>
@@ -105,6 +106,65 @@ std::vector<typename FrontierT::type_t> activeElements(const FrontierT& frontier
 template<typename FrontierT>
 void expectFrontier(const FrontierT& frontier, const std::vector<typename FrontierT::type_t>& expected) {
   expectEqual(activeElements(frontier), expected);
+}
+
+// Reads the element bits of a frontier (MLB level 0 or the bitmap) with a single copy. Unlike activeElements(), which
+// calls check() and launches a kernel per element, this is cheap enough for frontiers with many elements.
+template<typename FrontierT>
+std::vector<bool> readBits(sycl::queue& q, const FrontierT& frontier) {
+  using bitmap_t = typename FrontierT::bitmap_type;
+  const size_t range = frontier.getBitmapRange();
+  std::vector<bitmap_t> words(frontier.getBitmapSize());
+  q.copy(frontier.getDeviceFrontier().getData(), words.data(), words.size()).wait();
+
+  std::vector<bool> bits(frontier.getNumElems());
+  for (size_t i = 0; i < bits.size(); ++i) { bits[i] = (words[i / range] >> (i % range)) & 1; }
+  return bits;
+}
+
+// Inserts (or removes) on the device every element i for which pred(i) is true.
+template<typename FrontierT, typename PredT>
+void insertWhere(sycl::queue& q, const FrontierT& frontier, PredT pred, bool insert = true) {
+  auto bitmap = frontier.getDeviceFrontier();
+  q.parallel_for(sycl::range<1>{frontier.getNumElems()}, [=](sycl::id<1> idx) {
+     if (!pred(idx[0])) { return; }
+     if (insert) {
+       bitmap.insert(idx[0]);
+     } else {
+       bitmap.remove(idx[0]);
+     }
+   }).wait();
+}
+
+template<typename PredT>
+std::vector<bool> bitsWhere(size_t n, PredT pred) {
+  std::vector<bool> bits(n);
+  for (size_t i = 0; i < n; ++i) { bits[i] = pred(i); }
+  return bits;
+}
+
+// Returns the word offsets produced by the last computeActiveFrontier() call, sorted.
+template<typename FrontierT>
+std::vector<int> activeOffsets(sycl::queue& q, const FrontierT& frontier) {
+  auto bitmap = frontier.getDeviceFrontier();
+  uint32_t count = 0;
+  q.copy(bitmap.getOffsetsSize(), &count, 1).wait();
+  std::vector<int> offsets(count);
+  if (count > 0) { q.copy(bitmap.getOffsets(), offsets.data(), count).wait(); }
+  std::sort(offsets.begin(), offsets.end());
+  return offsets;
+}
+
+// Word offsets an active-frontier computation must report: words with at least one element, or, for pull (invert),
+// words that are not completely full.
+inline std::vector<int> expectedWords(const std::vector<bool>& bits, size_t range, bool invert = false) {
+  std::vector<int> words;
+  for (size_t w = 0; w * range < bits.size(); ++w) {
+    size_t active = 0;
+    for (size_t i = w * range; i < std::min(bits.size(), (w + 1) * range); ++i) { active += bits[i]; }
+    if (invert ? active < range : active > 0) { words.push_back(static_cast<int>(w)); }
+  }
+  return words;
 }
 
 } // namespace sygraph::tests

@@ -111,9 +111,9 @@ public:
   SYCL_EXTERNAL inline bool check(uint32_t idx) const { return _data[0][idx / _range] & (static_cast<bitmap_type>(1) << (idx % _range)); }
 
   SYCL_EXTERNAL inline bool empty() const {
-    bitmap_type count = static_cast<bitmap_type>(0);
-    for (auto i = 0; i < _size[Levels - 1]; i++) { count += _data[Levels - 1][i]; }
-    return count == static_cast<bitmap_type>(0);
+    bitmap_type any = static_cast<bitmap_type>(0);
+    for (uint32_t i = 0; i < _size[0]; i++) { any |= _data[0][i]; }
+    return any == static_cast<bitmap_type>(0);
   }
 
   SYCL_EXTERNAL inline bool empty(uint32_t el_idx, uint16_t level) const { return _data[level][el_idx]; }
@@ -219,7 +219,8 @@ public:
     const size_t local_size = types::detail::COMPUTE_UNIT_SIZE;
     const size_t global_size = local_size * sygraph::detail::device::getNumComputeUnits(_queue);
 
-    size_t bitmap_size = bitmap.getBitmapSize(Levels - 1);
+    // Upper levels only mark words that may hold elements (remove() clears level 0 alone), so scan level 0.
+    size_t bitmap_size = bitmap.getBitmapSize(0);
     size_t moduled_size = bitmap_size % local_size ? bitmap_size + local_size - (bitmap_size % local_size) : bitmap_size;
 
     bool check = false;
@@ -233,7 +234,7 @@ public:
         sycl::group<1> group = item.get_group();
         bool tmp = false;
         for (auto i = item.get_global_linear_id(); i < moduled_size && !tmp && !check_acc[0]; i += global_size) {
-          tmp = sycl::any_of_group(group, i < bitmap_size ? bitmap.getData(Levels - 1)[i] : 0, [](bitmap_type val) { return val != 0; });
+          tmp = sycl::any_of_group(group, i < bitmap_size ? bitmap.getData(0)[i] : 0, [](bitmap_type val) { return val != 0; });
         }
         if (group.leader() && !check_acc[0] && tmp) check_acc[0] = true;
       });
@@ -311,29 +312,35 @@ public:
   }
 
   void merge(const FrontierMLB<T>& other) {
-    auto e = _queue.submit([&](sycl::handler& cgh) {
-      auto bitmap = this->getDeviceFrontier();
-      auto other_bitmap = other.getDeviceFrontier();
-      cgh.parallel_for<merge_mlb_frontier_kernel>(sycl::range<1>(bitmap.getBitmapSize()),
-                                                  [=](sycl::id<1> idx) { bitmap.getData()[idx] |= other_bitmap.getData()[idx]; });
-    });
-    e.wait();
+    // Every level is combined so that the upper levels keep marking all words that may hold elements.
+    for (uint level = 0; level < Levels; level++) {
+      auto e = _queue.submit([&](sycl::handler& cgh) {
+        auto* data = this->getDeviceFrontier().getData(level);
+        auto* other_data = other.getDeviceFrontier().getData(level);
+        cgh.parallel_for<merge_mlb_frontier_kernel>(sycl::range<1>(_bitmap.getBitmapSize(level)),
+                                                    [=](sycl::id<1> idx) { data[idx] |= other_data[idx]; });
+      });
 #ifdef ENABLE_PROFILING
-    sygraph::Profiler::addEvent(e, "mergeFrontier");
+      sygraph::Profiler::addEvent(e, "mergeFrontier");
 #endif
+    }
+    _queue.wait();
   }
 
   void intersect(const FrontierMLB<T>& other) {
-    auto e = _queue.submit([&](sycl::handler& cgh) {
-      auto bitmap = this->getDeviceFrontier();
-      auto other_bitmap = other.getDeviceFrontier();
-      cgh.parallel_for<intersect_mlb_frontier_kernel>(sycl::range<1>(bitmap.getBitmapSize()),
-                                                      [=](sycl::id<1> idx) { bitmap.getData()[idx] &= other_bitmap.getData()[idx]; });
-    });
-    e.wait();
+    // Every level is combined so that the upper levels keep marking all words that may hold elements.
+    for (uint level = 0; level < Levels; level++) {
+      auto e = _queue.submit([&](sycl::handler& cgh) {
+        auto* data = this->getDeviceFrontier().getData(level);
+        auto* other_data = other.getDeviceFrontier().getData(level);
+        cgh.parallel_for<intersect_mlb_frontier_kernel>(sycl::range<1>(_bitmap.getBitmapSize(level)),
+                                                        [=](sycl::id<1> idx) { data[idx] &= other_data[idx]; });
+      });
 #ifdef ENABLE_PROFILING
-    sygraph::Profiler::addEvent(e, "intersectFrontier");
+      sygraph::Profiler::addEvent(e, "intersectFrontier");
 #endif
+    }
+    _queue.wait();
   }
 
   sygraph::frontier::detail::BitmapState<Levels, bitmap_type> saveState() {
@@ -391,47 +398,52 @@ public:
     size_t size = bitmap.getBitmapSize(1);
     size_t level0_size = bitmap.getBitmapSize(0);
     uint32_t range = bitmap.getBitmapRange();
-    // sycl::range<1> global_range{(size > local_range[0] ? size + local_range[0] - (size % local_range[0]) : local_range[0])};
     size_t global_size = sygraph::detail::device::getNumComputeUnits(_queue) * local_range[0];
     sycl::range<1> global_range{global_size};
 
+    // Reset the counter before the kernel: resetting it from inside would race with other work-groups' additions.
+    auto reset_e = _queue.fill(bitmap.getOffsetsSize(), static_cast<uint32_t>(0), 1);
+
     auto e = this->_queue.submit([&](sycl::handler& cgh) {
+      cgh.depends_on(reset_e);
+      // Each round, a work-item scans at most one level-1 word, which yields at most `range` offsets.
       sycl::local_accessor<int, 1> local_offsets(local_range[0] * range, cgh);
       sycl::local_accessor<uint32_t, 1> local_size(1, cgh);
 
       cgh.parallel_for<mlb_compute_active_frontier_kernel>(
           sycl::nd_range<1>{global_range, local_range},
           [=, offsets_size = bitmap.getOffsetsSize(), offsets = bitmap.getOffsets()](sycl::nd_item<1> item) {
-            // if (offsets_size[0] > 0) { return; } // TODO optimize for multiple calls on the same frontier
-            int gid = item.get_global_linear_id();
             auto group = item.get_group();
-            if (item.get_global_linear_id() == 0) { offsets_size[0] = 0; }
+            const size_t gid = item.get_global_linear_id();
+            const size_t lid = item.get_local_linear_id();
             sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed, sycl::memory_scope::work_group> local_size_ref(local_size[0]);
             sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed, sycl::memory_scope::device> offsets_size_ref{offsets_size[0]};
 
-            if (group.leader()) { local_size_ref.store(0); }
-            sycl::group_barrier(group);
-            for (uint32_t gid = item.get_global_linear_id(); gid < size; gid += item.get_global_range(0)) {
-              bitmap_type data = bitmap.getData(1)[gid];
-              for (size_t i = 0; i < range && i + (gid * range) < level0_size; i++) {
-                bool is_active = (data & (static_cast<bitmap_type>(1) << i)) != 0;
-                uint32_t pos;
-                if ((!invert && !is_active)
-                    || (invert && is_active && (bitmap.getData(0)[i + (gid * range)] == std::numeric_limits<bitmap_type>::max()))) {
-                  continue;
+            // The loop bound is the same for every work-item of the group, so the barriers below are reached uniformly.
+            for (size_t base = 0; base < size; base += global_size) {
+              if (group.leader()) { local_size_ref.store(0); }
+              sycl::group_barrier(group);
+
+              const size_t word = base + gid;
+              if (word < size) {
+                bitmap_type data = bitmap.getData(1)[word];
+                for (size_t i = 0; i < range && i + (word * range) < level0_size; i++) {
+                  bool is_active = (data & (static_cast<bitmap_type>(1) << i)) != 0;
+                  if ((!invert && !is_active)
+                      || (invert && is_active && (bitmap.getData(0)[i + (word * range)] == std::numeric_limits<bitmap_type>::max()))) {
+                    continue;
+                  }
+                  local_offsets[local_size_ref++] = static_cast<int>(i + (word * range));
                 }
-
-                local_offsets[local_size_ref++] = static_cast<int>(i + (gid * range));
               }
-            }
+              sycl::group_barrier(group);
 
-            sycl::group_barrier(group);
-
-            size_t data_offset = 0;
-            if (group.leader()) { data_offset = offsets_size_ref.fetch_add(local_size_ref.load()); }
-            data_offset = sycl::group_broadcast(group, data_offset, 0);
-            for (size_t i = item.get_local_linear_id(); i < local_size_ref.load(); i += item.get_local_range(0)) {
-              offsets[data_offset + i] = local_offsets[i];
+              const uint32_t count = local_size_ref.load();
+              size_t data_offset = 0;
+              if (group.leader()) { data_offset = offsets_size_ref.fetch_add(count); }
+              data_offset = sycl::group_broadcast(group, data_offset, 0);
+              for (size_t i = lid; i < count; i += item.get_local_range(0)) { offsets[data_offset + i] = local_offsets[i]; }
+              sycl::group_barrier(group);
             }
           });
     });
