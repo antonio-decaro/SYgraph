@@ -109,6 +109,22 @@ void expectEqual(const std::vector<T>& actual, const std::vector<T>& expected) {
   for (size_t i = 0; i < expected.size(); ++i) { assert(actual[i] == expected[i]); }
 }
 
+// Asserts that fn() throws a std::runtime_error whose message contains `expected_message`.
+template<typename FnT>
+void expectThrows(FnT&& fn, std::string_view expected_message) {
+  try {
+    fn();
+  } catch (const std::runtime_error& e) {
+    if (std::string_view(e.what()).find(expected_message) == std::string_view::npos) {
+      std::cerr << "Unexpected error message: \"" << e.what() << "\", expected it to contain \"" << expected_message << "\"" << std::endl;
+      assert(false);
+    }
+    return;
+  }
+  std::cerr << "Expected an error containing \"" << expected_message << "\", but nothing was thrown" << std::endl;
+  assert(false);
+}
+
 template<typename FrontierT>
 std::vector<typename FrontierT::type_t> activeElements(const FrontierT& frontier) {
   using value_t = typename FrontierT::type_t;

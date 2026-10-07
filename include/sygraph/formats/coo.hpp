@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #pragma once
+#include <algorithm>
 #include <memory>
 #include <sycl/sycl.hpp>
 #include <vector>
@@ -50,9 +51,12 @@ public:
    * @param row_indices A vector containing the row indices of the non-zero elements.
    * @param column_indices A vector containing the column indices of the non-zero elements.
    * @param nnz_values A vector containing the values of the non-zero elements.
+   * @param num_nodes The number of vertices. If omitted, it is the largest index plus one (0 when there are no entries).
    */
-  COO(std::vector<index_t> row_indices, std::vector<index_t> column_indices, std::vector<value_t> nnz_values)
-      : _row_indices(row_indices), _column_indices(column_indices), _nnz_values(nnz_values) {}
+  COO(std::vector<index_t> row_indices, std::vector<index_t> column_indices, std::vector<value_t> nnz_values, size_t num_nodes = 0)
+      : _row_indices(row_indices), _column_indices(column_indices), _nnz_values(nnz_values) {
+    _num_nodes = num_nodes > 0 ? num_nodes : derivedNumNodes();
+  }
 
   /**
    * @brief Constructs a COO (Coordinate Format) object with pre-allocated space for the given number of values.
@@ -75,11 +79,11 @@ public:
    *
    * This function returns a constant reference to a vector containing the row indices
    * of the non-zero elements in the matrix. The row indices are stored in a vector
-   * of type `offset_t`.
+   * of type `index_t`.
    *
-   * @return const std::vector<offset_t>& A constant reference to the vector of row indices.
+   * @return const std::vector<index_t>& A constant reference to the vector of row indices.
    */
-  const std::vector<offset_t>& getRowIndices() const { return _row_indices; }
+  const std::vector<index_t>& getRowIndices() const { return _row_indices; }
 
 
   /**
@@ -109,9 +113,9 @@ public:
    * of the sparse matrix stored in COO format. The row indices indicate the
    * row positions of the non-zero elements in the matrix.
    *
-   * @return std::vector<offset_t>& Reference to the vector of row indices.
+   * @return std::vector<index_t>& Reference to the vector of row indices.
    */
-  std::vector<offset_t>& getRowIndices() { return _row_indices; }
+  std::vector<index_t>& getRowIndices() { return _row_indices; }
 
   /**
    * @brief Retrieves the column indices of the COO (Coordinate) format matrix.
@@ -146,11 +150,22 @@ public:
    */
   size_t getSize() const { return _row_indices.size(); }
 
+  /**
+   * @brief Returns the number of vertices, which can exceed the largest index when the last vertices have no edges.
+   */
+  size_t getNumNodes() const { return _num_nodes; }
 
-  // static methods
-
+  void setNumNodes(size_t num_nodes) { _num_nodes = num_nodes; }
 
 private:
+  size_t derivedNumNodes() const {
+    if (_row_indices.empty()) { return 0; }
+    return static_cast<size_t>(std::max(*std::max_element(_row_indices.begin(), _row_indices.end()),
+                                        *std::max_element(_column_indices.begin(), _column_indices.end())))
+           + 1;
+  }
+
+  size_t _num_nodes = 0;
   std::vector<index_t> _row_indices;
   std::vector<index_t> _column_indices;
   std::vector<value_t> _nnz_values;

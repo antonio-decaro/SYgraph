@@ -10,6 +10,9 @@ add_executable(csr formats/csr.cpp)
 add_executable(coo2csr_weighted formats/coo2csr.cpp)
 add_executable(coo2csr_unweighted formats/coo2csr_unweighted.cpp)
 add_executable(format_properties formats/properties.cpp)
+add_executable(matrix_market formats/matrix_market.cpp)
+add_executable(coo_reader formats/coo_reader.cpp)
+add_executable(csr_io formats/csr_io.cpp)
 add_executable(graph_build graph/graph.cpp)
 add_executable(graph_teardown graph/graph_teardown.cpp)
 add_executable(advance operators/advance.cpp)
@@ -99,6 +102,24 @@ add_test(
 add_test(
   NAME format_properties
   COMMAND format_properties
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
+  NAME matrix_market
+  COMMAND matrix_market
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
+  NAME coo_reader
+  COMMAND coo_reader
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
+  NAME csr_io
+  COMMAND csr_io
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
@@ -214,6 +235,9 @@ set_tests_properties(
   coo2csr_weighted
   coo2csr_unweighted
   format_properties
+  matrix_market
+  coo_reader
+  csr_io
   graph_build
   graph_teardown
   advance_operator

@@ -23,27 +23,8 @@ int main() {
   auto col_indices = csr.getColumnIndices();
   auto values = csr.getValues();
 
-  assert(row_offsets.size() - 1 == 4);
-  assert(row_offsets[0] == 0);
-  assert(row_offsets[1] == 2);
-  assert(row_offsets[2] == 5);
-  assert(row_offsets[3] == 7);
-  assert(row_offsets[4] == 8);
-  assert(col_indices.size() == 8);
-  assert(values.size() == 8);
-
-  std::cout << "             ";
-  for (int i = 0; i < row_offsets.size(); ++i) { std::cout << i << " "; }
-  std::cout << std::endl << "row_offsets: ";
-  for (int i = 0; i < row_offsets.size(); ++i) { std::cout << row_offsets[i] << " "; }
-  std::cout << std::endl;
-
-  std::cout << "col_indices: ";
-  for (int i = 0; i < col_indices.size(); ++i) { std::cout << col_indices[i] << " "; }
-  std::cout << std::endl << "      values:";
-  for (int i = 0; i < values.size(); ++i) {
-    assert(values[i] == 1);
-    std::cout << values[i] << " ";
-  }
-  std::cout << std::endl;
+  // Each row is sorted by column; edges without an explicit weight get weight 1.
+  assert(row_offsets == (std::vector<uint>{0, 2, 5, 7, 8}));
+  assert(col_indices == (std::vector<uint>{1, 2, 0, 2, 3, 0, 1, 1}));
+  assert(values == std::vector<uint>(8, 1));
 }
