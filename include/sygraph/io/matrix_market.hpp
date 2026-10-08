@@ -4,6 +4,8 @@
  */
 #pragma once
 
+#include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -66,6 +68,10 @@ struct Banner {
       std::string symmetry_str;
 
       iss >> object_str >> format_str >> field_str >> symmetry_str;
+      // Keywords are case-insensitive in the Matrix Market format.
+      for (auto* str : {&object_str, &format_str, &field_str, &symmetry_str}) {
+        std::transform(str->begin(), str->end(), str->begin(), [](unsigned char c) { return std::tolower(c); });
+      }
 
       if (object_str == "matrix") {
         object = mm_object::matrix;
@@ -141,9 +147,15 @@ struct Banner {
 
   template<typename ValueT, typename IndexT, typename OffsetT>
   void validate() {
-    if (this->object != mm_object::matrix) { throw std::runtime_error("Invalid MatrixMarket object type"); }
+    if (this->object != mm_object::matrix) { throw std::runtime_error("Unsupported MatrixMarket object: only 'matrix' is supported"); }
 
-    if (this->format != mm_format::coordinate) { throw std::runtime_error("Invalid MatrixMarket format type"); }
+    if (this->format != mm_format::coordinate) { throw std::runtime_error("Unsupported MatrixMarket format: only 'coordinate' is supported"); }
+
+    if (this->field == mm_field::complex) { throw std::runtime_error("Unsupported MatrixMarket field: 'complex'"); }
+
+    if (this->symmetry == mm_symmetry::skew_symmetric || this->symmetry == mm_symmetry::hermitian) {
+      throw std::runtime_error("Unsupported MatrixMarket symmetry: only 'general' and 'symmetric' are supported");
+    }
 
     if (this->field == mm_field::real && !std::is_floating_point<ValueT>::value) { throw std::runtime_error("Invalid MatrixMarket field type"); }
     if (this->field == mm_field::integer && !std::is_integral<ValueT>::value) { throw std::runtime_error("Invalid MatrixMarket field type"); }

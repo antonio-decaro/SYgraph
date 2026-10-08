@@ -32,9 +32,6 @@ SYCL_EXTERNAL inline uint32_t workgroupMappedUpperBound(const T* values, uint32_
   return left;
 }
 
-template<sygraph::operators::direction Direction, sygraph::frontier::frontier_view IFW, sygraph::frontier::frontier_view OFW>
-class workgroup_mapped_advance_kernel; // needed only for naming purposes
-
 template<sygraph::frontier::frontier_view IFW,
          sygraph::frontier::frontier_view OFW,
          sygraph::operators::direction Direction,
@@ -205,7 +202,8 @@ sygraph::Event launchBitmapKernel(GraphT& graph, const InFrontierT& in, const Ou
     sycl::local_accessor<uint32_t, 1> scan_ends{local_range, cgh};
     sycl::local_accessor<uint32_t, 1> source_done{local_range, cgh};
 
-    cgh.parallel_for<workgroup_mapped_advance_kernel<Direction, InFW, OutFW>>(
+    // Unnamed kernel: its type includes the user functor, so every instantiation gets a distinct name.
+    cgh.parallel_for(
         sycl::nd_range<1>{global_range, local_range},
         bitmap_kernel_t{context, launch.graph_dev, vertices, start_edges, scan_begins, scan_ends, source_done, std::forward<LambdaT>(functor)});
   });

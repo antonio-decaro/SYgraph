@@ -21,9 +21,6 @@ namespace operators {
 namespace filter {
 namespace detail {
 
-class inplace_filter_kernel;
-class external_filter_kernel;
-
 template<graph::detail::GraphConcept GraphT, typename InFrontierT>
 sygraph::detail::kernel::LaunchConfig buildLaunchConfig(const GraphT& graph, const InFrontierT& in, int expected_size, sycl::queue& q) {
   sygraph::detail::kernel::LaunchConfig config{};
@@ -72,7 +69,7 @@ launchBitmapKernelExternal(GraphT& graph, const sygraph::frontier::Frontier<T, F
   uint8_t bitmap_range = in_dev.getBitmapRange();
 
   sygraph::Event e = q.submit([&](sycl::handler& cgh) {
-    cgh.parallel_for<external_filter_kernel>(sycl::nd_range<1>{config.global, config.local}, [=](sycl::nd_item<1> item) {
+    cgh.parallel_for(sycl::nd_range<1>{config.global, config.local}, [=](sycl::nd_item<1> item) {
       auto lid = item.get_local_id();
       auto group_id = item.get_group_linear_id();
       auto local_size = item.get_local_range()[0];
@@ -105,7 +102,7 @@ sygraph::Event launchBitmapKernelInplace(GraphT& graph, const sygraph::frontier:
   using type_t = T;
 
   sygraph::Event e = q.submit([&](sycl::handler& cgh) {
-    cgh.parallel_for<inplace_filter_kernel>(sycl::nd_range<1>{config.global, config.local}, [=](sycl::nd_item<1> item) {
+    cgh.parallel_for(sycl::nd_range<1>{config.global, config.local}, [=](sycl::nd_item<1> item) {
       auto lid = item.get_local_id();
       auto group_id = item.get_group_linear_id();
       auto local_size = item.get_local_range()[0];

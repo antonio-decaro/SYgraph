@@ -6,13 +6,14 @@
 
 #include <sycl/sycl.hpp>
 
+#include <limits>
 #include <memory>
-#include <vector>
 #include <sygraph/frontier/frontier.hpp>
 #include <sygraph/graph/graph.hpp>
 #include <sygraph/operators/advance/advance.hpp>
 #include <sygraph/operators/filter/filter.hpp>
 #include <sygraph/operators/for/for.hpp>
+#include <vector>
 #ifdef ENABLE_PROFILING
 #include <sygraph/utils/profiler.hpp>
 #endif
@@ -29,6 +30,9 @@ struct SSSPInstance {
   using edge_t = typename GraphType::edge_t;
   using weight_t = typename GraphType::weight_t;
 
+  /// Distance of the vertices that cannot be reached from the source.
+  static constexpr weight_t unreachable = std::numeric_limits<weight_t>::max();
+
   GraphType& G;
   vertex_t source;
   weight_t* distances;
@@ -40,7 +44,7 @@ struct SSSPInstance {
     size_t size = G.getVertexCount();
 
     distances = memory::detail::memoryAlloc<weight_t, memory::space::device>(size, queue);
-    queue.fill(distances, static_cast<weight_t>(size + 1), size).wait();
+    queue.fill(distances, unreachable, size).wait();
     queue.fill(&distances[source], static_cast<weight_t>(0), 1).wait();
 
     parents = memory::detail::memoryAlloc<vertex_t, memory::space::device>(size, queue);
@@ -54,11 +58,11 @@ struct SSSPInstance {
     size_t vertex_count = G.getVertexCount();
     size_t visited_nodes = 0;
     auto& queue = G.getQueue();
-    std::vector<edge_t> dists (vertex_count);
+    std::vector<weight_t> dists(vertex_count);
     queue.copy(distances, dists.data(), vertex_count).wait();
 
     for (size_t i = 0; i < G.getVertexCount(); i++) {
-      if (dists[i] != static_cast<edge_t>(vertex_count + 1)) { visited_nodes++; }
+      if (dists[i] != unreachable) { visited_nodes++; }
     }
     return visited_nodes;
   }
@@ -67,11 +71,11 @@ struct SSSPInstance {
     size_t vertex_count = G.getVertexCount();
     size_t visited_edges = 0;
     auto& queue = G.getQueue();
-    std::vector<edge_t> dists (vertex_count);
+    std::vector<weight_t> dists(vertex_count);
     queue.copy(distances, dists.data(), vertex_count).wait();
 
     for (size_t i = 0; i < G.getVertexCount(); i++) {
-      if (dists[i] != static_cast<edge_t>(vertex_count + 1)) { visited_edges += G.getDegree(i); }
+      if (dists[i] != unreachable) { visited_edges += G.getDegree(i); }
     }
     return visited_edges;
   }
@@ -117,10 +121,7 @@ public:
    *
    * @param source The source vertex from which to start the SSSP algorithm.
    */
-  void init(vertex_t& source) {
-    _instance = std::make_unique<detail::SSSPInstance<GraphType>>(_g, source);
-    _instance->distances[source] = 0;
-  }
+  void init(vertex_t source) { _instance = std::make_unique<detail::SSSPInstance<GraphType>>(_g, source); }
 
 
   /**
@@ -209,11 +210,32 @@ public:
 #endif
   }
 
-  weight_t getDistance(size_t vertex) const { return _instance->distances[vertex]; }
+  /**
+   * @brief Returns the distance from the source to a vertex, or `unreachable()` if the vertex cannot be reached.
+   */
+  weight_t getDistance(size_t vertex) const {
+    weight_t distance;
+    _instance->G.getQueue().copy(_instance->distances + vertex, &distance, 1).wait();
+    return distance;
+  }
+
+  /**
+   * @brief Returns the distances from the source to all vertices; unreachable vertices hold `unreachable()`.
+   */
+  std::vector<weight_t> getDistances() const {
+    std::vector<weight_t> distances(_instance->G.getVertexCount());
+    _instance->G.getQueue().copy(_instance->distances, distances.data(), distances.size()).wait();
+    return distances;
+  }
+
+  /**
+   * @brief The distance reported for vertices that cannot be reached from the source.
+   */
+  static constexpr weight_t unreachable() { return detail::SSSPInstance<GraphType>::unreachable; }
 
   vertex_t getParents(size_t vertex) const {
     throw std::runtime_error("Not implemented");
-    return _instance->parents[vertex];
+    return 0;
   }
 
 private:

@@ -117,7 +117,7 @@ struct BFSInstance {
  *
  * @tparam GraphType The type of the graph on which the BFS algorithm will be performed.
  */
-template<typename GraphType> // TODO: Implement the getParents method.
+template<typename GraphType>
 class BFS {
   using vertex_t = typename GraphType::vertex_t;
   using edge_t = typename GraphType::edge_t;
@@ -134,7 +134,7 @@ public:
    * @param G The graph on which the BFS algorithm will be performed.
    * @param source The source vertex for the BFS algorithm.
    */
-  void init(vertex_t& source) { _instance = std::make_unique<detail::BFSInstance<GraphType>>(_g, source); }
+  void init(vertex_t source) { _instance = std::make_unique<detail::BFSInstance<GraphType>>(_g, source); }
 
   /**
    * @brief Resets the BFS algorithm.
@@ -185,6 +185,8 @@ public:
           [=](auto src, auto dst, auto edge, auto weight) -> bool {
             if (distances[dst] == size + 1) {
               distances[dst] = iter + 1;
+              // Several sources may race here; any of them is a valid parent (all are at distance iter).
+              parents[dst] = src;
               return true;
             }
             return false;
@@ -201,6 +203,7 @@ public:
               [=](auto src, auto dst, auto edge, auto weight) -> bool {
                 if (distances[src] == size + 1 && distances[dst] == iter) {
                   distances[src] = iter + 1;
+                  parents[src] = dst;
                   return true;
                 }
                 return false;
@@ -243,7 +246,11 @@ public:
    * @param vertex The vertex for which to get the distance.
    * @return A pointer to the array of distances.
    */
-  edge_t getDistance(size_t vertex) const { return _instance->distances[vertex]; }
+  edge_t getDistance(size_t vertex) const {
+    edge_t distance;
+    _instance->G.getQueue().copy(_instance->distances + vertex, &distance, 1).wait();
+    return distance;
+  }
 
   /**
    * @brief Returns the distances from the source vertex to all vertices in the graph.
@@ -263,10 +270,17 @@ public:
    * @param vertex The vertex for which to get the parent vertices.
    * @return A pointer to the array of parent vertices.
    */
-  vertex_t getParent(size_t vertex) const { return _instance->parents[vertex]; }
+  vertex_t getParent(size_t vertex) const {
+    vertex_t parent;
+    _instance->G.getQueue().copy(_instance->parents + vertex, &parent, 1).wait();
+    return parent;
+  }
 
   /**
    * @brief Returns the parent vertices for all vertices in the graph.
+   *
+   * The parent of a reached vertex is a neighbour one level closer to the source. The source and the unreached
+   * vertices have parent `vertex_t(-1)`.
    *
    * @return A vector of parent vertices.
    */
@@ -307,9 +321,9 @@ private:
     size_t nodes = G.getVertexCount();
 
     auto e = queue.submit([&](sycl::handler& cgh) {
-      auto sum_reduction = sycl::reduction<uint32_t>(degree_buf, cgh, sycl::plus<uint32_t>());
+      auto sum_reduction = sycl::reduction<uint32_t>(degree_buf, cgh, sycl::plus<uint32_t>(), sycl::property::reduction::initialize_to_identity{});
 
-      cgh.parallel_for<class compute_unexplored_degree_kernel>(sycl::range<1>(nodes), sum_reduction, [=](sycl::id<1> idx, auto& sum) {
+      cgh.parallel_for(sycl::range<1>(nodes), sum_reduction, [=](sycl::id<1> idx, auto& sum) {
         size_t vertex = idx[0];
         if (distances[vertex] == nodes + 1) { sum += static_cast<uint32_t>(g_device.getDegree(vertex)); }
       });

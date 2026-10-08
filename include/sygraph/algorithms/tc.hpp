@@ -114,7 +114,9 @@ public:
 
   size_t getNumTriangles(vertex_t v) const {
     if (!_instance) { throw std::runtime_error("TC instance not initialized"); }
-    return _instance->triangles[v];
+    uint32_t count;
+    _g.getQueue().copy(_instance->triangles + v, &count, 1).wait();
+    return count;
   }
 
   size_t getNumTriangles() const {

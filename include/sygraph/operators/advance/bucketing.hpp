@@ -18,9 +18,6 @@ namespace advance {
 
 namespace detail {
 
-template<sygraph::operators::direction Direction, sygraph::frontier::frontier_view IFW, sygraph::frontier::frontier_view OFW>
-class bucketing_advance_kernel; // needed only for naming purposes
-
 template<sygraph::frontier::frontier_view IFW,
          sygraph::frontier::frontier_view OFW,
          sygraph::operators::direction Direction,
@@ -274,21 +271,21 @@ sygraph::Event launchBitmapKernel(GraphT& graph, const InFrontierT& in, const Ou
     sycl::local_accessor<uint32_t, 1> workgroup_ids{local_range, cgh};
     sycl::local_accessor<uint32_t, 1> workgroup_claimed{local_range, cgh};
 
-    cgh.parallel_for<bucketing_advance_kernel<Direction, InFW, OutFW>>(sycl::nd_range<1>{global_range, local_range},
-                                                                       bitmap_kernel_t{context,
-                                                                                       launch.graph_dev,
-                                                                                       n_edges_wg,
-                                                                                       n_edges_sg,
-                                                                                       visited,
-                                                                                       subgroup_reduce,
-                                                                                       subgroup_reduce_tail,
-                                                                                       subgroup_ids,
-                                                                                       subgroup_claimed,
-                                                                                       workgroup_reduce,
-                                                                                       workgroup_reduce_tail,
-                                                                                       workgroup_ids,
-                                                                                       workgroup_claimed,
-                                                                                       std::forward<LambdaT>(functor)});
+    cgh.parallel_for(sycl::nd_range<1>{global_range, local_range},
+                     bitmap_kernel_t{context,
+                                     launch.graph_dev,
+                                     n_edges_wg,
+                                     n_edges_sg,
+                                     visited,
+                                     subgroup_reduce,
+                                     subgroup_reduce_tail,
+                                     subgroup_ids,
+                                     subgroup_claimed,
+                                     workgroup_reduce,
+                                     workgroup_reduce_tail,
+                                     workgroup_ids,
+                                     workgroup_claimed,
+                                     std::forward<LambdaT>(functor)});
   });
   return {e};
 }

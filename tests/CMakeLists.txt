@@ -3,19 +3,30 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 add_executable(bitmap_frontier frontier/bitmap_frontier.cpp)
 add_executable(mlb_frontier frontier/mlb_frontier.cpp)
+add_executable(mlb_semantics frontier/mlb_semantics.cpp)
+add_executable(mlb_active_frontier_large frontier/mlb_active_frontier_large.cpp)
+add_executable(bitmap_semantics frontier/bitmap_semantics.cpp)
 add_executable(csr formats/csr.cpp)
 add_executable(coo2csr_weighted formats/coo2csr.cpp)
 add_executable(coo2csr_unweighted formats/coo2csr_unweighted.cpp)
 add_executable(format_properties formats/properties.cpp)
+add_executable(matrix_market formats/matrix_market.cpp)
+add_executable(coo_reader formats/coo_reader.cpp)
+add_executable(csr_io formats/csr_io.cpp)
 add_executable(graph_build graph/graph.cpp)
 add_executable(graph_teardown graph/graph_teardown.cpp)
 add_executable(advance operators/advance.cpp)
 add_executable(advance_graph operators/advance_graph.cpp)
 add_executable(advance_pull operators/advance_pull.cpp)
+add_executable(advance_push_semantics operators/advance_push_semantics.cpp)
+add_executable(advance_pull_semantics operators/advance_pull_semantics.cpp)
 add_executable(filter_compute operators/filter_compute.cpp)
+add_executable(filter_compute_semantics operators/filter_compute_semantics.cpp)
 add_executable(intersection_operator operators/intersection.cpp)
 add_executable(bfs_algorithm algorithms/bfs.cpp)
+add_executable(bfs_random algorithms/bfs_random.cpp)
 add_executable(sssp_algorithm algorithms/sssp.cpp)
+add_executable(sssp_random algorithms/sssp_random.cpp)
 add_executable(cc_algorithm algorithms/cc.cpp)
 add_executable(tc_algorithm algorithms/tc.cpp)
 add_executable(bc_algorithm algorithms/bc.cpp)
@@ -53,6 +64,24 @@ add_test(
 )
 
 add_test(
+  NAME mlb_semantics
+  COMMAND mlb_semantics
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
+  NAME mlb_active_frontier_large
+  COMMAND mlb_active_frontier_large
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
+  NAME bitmap_semantics
+  COMMAND bitmap_semantics
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
   NAME test_csr_format
   COMMAND csr
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -73,6 +102,24 @@ add_test(
 add_test(
   NAME format_properties
   COMMAND format_properties
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
+  NAME matrix_market
+  COMMAND matrix_market
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
+  NAME coo_reader
+  COMMAND coo_reader
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
+  NAME csr_io
+  COMMAND csr_io
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
@@ -107,8 +154,26 @@ add_test(
 )
 
 add_test(
+  NAME advance_push_semantics
+  COMMAND advance_push_semantics
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
+  NAME advance_pull_semantics
+  COMMAND advance_pull_semantics
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
   NAME filter_compute_operator
   COMMAND filter_compute
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
+  NAME filter_compute_semantics
+  COMMAND filter_compute_semantics
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
@@ -125,8 +190,20 @@ add_test(
 )
 
 add_test(
+  NAME bfs_random
+  COMMAND bfs_random
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
   NAME sssp_algorithm
   COMMAND sssp_algorithm
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(
+  NAME sssp_random
+  COMMAND sssp_random
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
@@ -151,19 +228,30 @@ add_test(
 set_tests_properties(
   test_bitmap_frontier
   test_mlb_frontier
+  mlb_semantics
+  mlb_active_frontier_large
+  bitmap_semantics
   test_csr_format
   coo2csr_weighted
   coo2csr_unweighted
   format_properties
+  matrix_market
+  coo_reader
+  csr_io
   graph_build
   graph_teardown
   advance_operator
   advance_graph_operator
   advance_pull_operator
+  advance_push_semantics
+  advance_pull_semantics
   filter_compute_operator
+  filter_compute_semantics
   intersection_operator
   bfs_algorithm
+  bfs_random
   sssp_algorithm
+  sssp_random
   cc_algorithm
   tc_algorithm
   bc_algorithm
